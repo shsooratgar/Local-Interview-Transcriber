@@ -1,0 +1,19 @@
+# Copy this file to config.yaml and adjust. config.yaml is git-ignored.
+
+# --- Models ---
+llm_model: "qwen2.5:14b"                              # Ollama model for the review pass
+whisper_model: "mlx-community/whisper-large-v3-mlx"   # re-transcription model
+
+# --- Languages expected in the interviews ---
+languages: ["en", "de"]
+
+# --- Flagging thresholds ---
+low_confidence_threshold: 0.55   # avg word probability below this = suspect span
+context_window_seconds: 20       # audio/text context shown to the LLM around a span
+min_segment_gap_seconds: 0.5     # merge adjacent suspect spans closer than this
+
+# --- Paths (keep ALL confidential data under data/) ---
+audio_dir: "data/audio"
+transcript_dir: "data/transcripts"
+output_dir: "output"
+glossary_file: "glossary/glossary.txt"

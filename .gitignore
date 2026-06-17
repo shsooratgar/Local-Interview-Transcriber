@@ -1,0 +1,48 @@
+# =====================================================================
+#  CONFIDENTIAL DATA — never commit interviews, transcripts, or outputs
+# =====================================================================
+data/*
+!data/README.md
+output/*
+!output/README.md
+
+# Local config (may contain paths/names) and the real glossary
+config.yaml
+glossary/*.txt
+!glossary/*.example.txt
+
+# Audio / transcript / document files anywhere (defense in depth)
+*.mp3
+*.wav
+*.m4a
+*.mp4
+*.aac
+*.flac
+*.ogg
+*.vtt
+*.srt
+*.html
+*.docx
+
+# =====================================================================
+#  Python
+# =====================================================================
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# =====================================================================
+#  Models / large caches
+# =====================================================================
+models/
+*.gguf
+*.bin
+
+# =====================================================================
+#  macOS / editors
+# =====================================================================
+.DS_Store
+.vscode/
+.idea/

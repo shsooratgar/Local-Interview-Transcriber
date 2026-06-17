@@ -1,0 +1,11 @@
+# Install inside the conda env:  pip install -r requirements.txt
+# System dependencies (install via Homebrew, NOT pip): ffmpeg, ollama
+
+mlx-whisper        # Whisper, GPU-accelerated on Apple Silicon (transcription)
+python-docx        # write annotated .docx reports
+requests           # talk to the local Ollama server
+webvtt-py          # parse .vtt transcripts (noScribe export)
+beautifulsoup4     # parse noScribe .html transcripts
+lxml               # html/xml parser backend
+pyyaml             # read config.yaml
+tqdm               # progress bars for batch runs
