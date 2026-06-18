@@ -3,6 +3,7 @@
 
 mlx-whisper        # Whisper, GPU-accelerated on Apple Silicon (transcription)
 python-docx        # write annotated .docx reports
+openpyxl           # write .xlsx summary sheets
 requests           # talk to the local Ollama server
 webvtt-py          # parse .vtt transcripts (noScribe export)
 beautifulsoup4     # parse noScribe .html transcripts

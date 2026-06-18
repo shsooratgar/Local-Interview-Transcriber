@@ -1,0 +1,5 @@
+# Extra packages used ONLY to fetch public test datasets (not needed by end users).
+#   pip install -r requirements-dev.txt
+datasets       # stream public speech datasets (AMI, VoxPopuli, TED-LIUM)
+soundfile      # write sample audio to .wav
+librosa        # audio resampling / IO helpers

@@ -5,7 +5,7 @@ JSON in the output directory so we never transcribe the same file twice.
 
 Usage:
     python src/transcribe.py data/audio/interview01.m4a
-    python src/transcribe.py data/audio/interview01.m4a --model mlx-community/whisper-large-v3-mlx --force
+    python src/transcribe.py data/audio/interview01.m4a --model mlx-community/whisper-tiny-mlx --out output/interview01.tiny.json
 """
 from __future__ import annotations
 
@@ -71,9 +71,9 @@ def _normalize(raw: dict, audio_path, model: str) -> dict:
     }
 
 
-def cached_transcribe(audio_path, cfg, force=False):
+def cached_transcribe(audio_path, cfg, force=False, out_path=None):
     ensure_dirs(cfg)
-    out = Path(cfg["output_dir"]) / (Path(audio_path).stem + ".whisper.json")
+    out = Path(out_path) if out_path else Path(cfg["output_dir"]) / (Path(audio_path).stem + ".whisper.json")
     if out.exists() and not force:
         return json.loads(out.read_text()), out
     terms = load_glossary(cfg.get("glossary_file"))
@@ -90,6 +90,7 @@ def main():
     ap.add_argument("audio")
     ap.add_argument("--model", default=None)
     ap.add_argument("--language", default=None)
+    ap.add_argument("--out", default=None, help="output JSON path (default: output/<stem>.whisper.json)")
     ap.add_argument("--force", action="store_true")
     args = ap.parse_args()
 
@@ -99,7 +100,7 @@ def main():
     if args.language:
         cfg["whisper_language"] = args.language
 
-    result, out = cached_transcribe(args.audio, cfg, force=args.force)
+    result, out = cached_transcribe(args.audio, cfg, force=args.force, out_path=args.out)
     n_words = sum(len(s["words"]) for s in result["segments"])
     print(f"language={result['language']}  duration={result['duration']:.1f}s  "
           f"segments={len(result['segments'])}  words={n_words}  "
