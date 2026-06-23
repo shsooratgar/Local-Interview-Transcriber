@@ -148,11 +148,14 @@ def main():
         review = review_with_base(args.audio, args.base, cfg, do_summary=not args.no_summary)
         out = Path(cfg["output_dir"]) / (Path(args.audio).stem + ".review.docx")
         write_docx_report(args.base, review, out)
+        from report_html import write_html_report
+        html_out = write_html_report(args.audio, review, out.with_suffix(".html"))
         (out.with_suffix(".json")).write_text(json.dumps(review, ensure_ascii=False, indent=2))
         print(f"corrections: {len(review['disagreements'])}  omissions: {len(review['omissions'])}  "
               f"overlaps: {len(review['overlaps'])}  match_coverage: {review['match_coverage']}")
         print(f"summary topics: {len(review['summary']['topics'])}")
-        print(f"saved -> {out}   ({time.time() - t0:.0f}s)")
+        print(f"saved -> {out}")
+        print(f"        {html_out}   ({time.time() - t0:.0f}s)")
         return
 
     result, out = review_file(args.audio, cfg, args.max_flags, do_summary=not args.no_summary)
