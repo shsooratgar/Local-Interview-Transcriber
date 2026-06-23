@@ -4,14 +4,21 @@
 We only ADD to the document; the original transcript text and table are left
 intact:
   - an 'LLM Summary' row is appended to the top table (existing rows untouched)
-  - a clearly-labelled review section is appended at the end: overview, suggested
-    corrections, possible omissions, and overlapping-speech spots to verify.
+  - a clearly-labelled review section is appended at the end: overview, a clean
+    suggested-corrections table, possible omissions, and overlaps to verify.
 """
 from __future__ import annotations
 
 from pathlib import Path
 
 from docx import Document
+
+
+def _mmss(s):
+    if s is None:
+        return "—"
+    s = int(s)
+    return f"{s // 60:02d}:{s % 60:02d}"
 
 
 def _fill_cell_bullets(cell, items):
@@ -33,14 +40,17 @@ def _add_summary_row(doc, topics):
     _fill_cell_bullets(row.cells[min(1, len(row.cells) - 1)], topics)
 
 
-def _grid(doc, headers):
+def _grid(doc, headers, widths=None):
     t = doc.add_table(rows=1, cols=len(headers))
     try:
         t.style = "Table Grid"
     except Exception:
         pass
     for i, h in enumerate(headers):
-        t.rows[0].cells[i].text = h
+        cell = t.rows[0].cells[i]
+        cell.text = ""
+        run = cell.paragraphs[0].add_run(h)
+        run.bold = True
     return t
 
 
@@ -53,26 +63,31 @@ def write_docx_report(base_docx, review, out_path):
     doc.add_heading("LLM review — automatic suggestions, please verify", level=1)
     if summary.get("summary"):
         doc.add_paragraph(summary["summary"])
-    doc.add_paragraph(f"(transcript/audio match coverage: {review.get('match_coverage', '?')})")
+    doc.add_paragraph(f"(transcript/audio match coverage: {review.get('match_coverage', '?')}. "
+                      f"Times refer to the audio; use the .html viewer to hear each one.)")
 
     doc.add_heading("Suggested corrections", level=2)
     corr = review.get("disagreements", [])
     if corr:
-        t = _grid(doc, ["In transcript", "Suggested (from audio)", "Why", "Conf."])
+        t = _grid(doc, ["Time", "Speaker", "In transcript", "Suggested (from audio)", "Conf."])
         for d in corr:
             c = t.add_row().cells
-            c[0].text = d.get("base_text", "")
-            c[1].text = (d.get("llm", {}).get("correction") or d.get("audio_text", ""))
-            c[2].text = d.get("llm", {}).get("reason", "")
-            c[3].text = str(d.get("llm", {}).get("confidence", ""))
+            c[0].text = _mmss(d.get("start"))
+            c[1].text = str(d.get("speaker") or "")
+            c[2].text = d.get("base_text", "")
+            c[3].text = (d.get("llm", {}).get("correction") or d.get("audio_text", ""))
+            c[4].text = str(d.get("llm", {}).get("confidence", ""))
     else:
         doc.add_paragraph("None found.")
 
     doc.add_heading("Possible omissions (heard in audio, missing from transcript)", level=2)
     oms = review.get("omissions", [])
     if oms:
+        t = _grid(doc, ["Time", "Heard in audio"])
         for o in oms:
-            doc.add_paragraph(f"• {o.get('audio_text', '')}")
+            c = t.add_row().cells
+            c[0].text = _mmss(o.get("start"))
+            c[1].text = o.get("audio_text", "")
     else:
         doc.add_paragraph("None found.")
 
