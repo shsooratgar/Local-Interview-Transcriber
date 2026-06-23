@@ -82,6 +82,42 @@ def review_span(span_text, context_text, glossary_terms, model, ollama_url):
     return verdict
 
 
+DISAGREE_PROMPT = """An automatic transcript may contain a mis-hearing. For the marked part:
+- the transcript reads:  "{base_text}"
+- an independent re-transcription of the same audio heard:  "{audio_text}"
+
+Context (the suspected part is marked with >>> <<<):
+{context_marked}
+
+If the audio version is clearly the correct wording (a genuine fix), return it as the correction
+(lightly cleaned for punctuation/casing). If the transcript is actually fine, set is_error=false.
+Do NOT invent anything beyond these two candidates. Keep the original language.
+
+Respond with ONLY this JSON:
+{{"is_error": true or false, "correction": "the corrected text (empty if fine)", "reason": "short reason", "confidence": 0.0 to 1.0}}"""
+
+
+def review_disagreement(base_text, audio_text, context_text, model, ollama_url):
+    """Adjudicate a base-vs-audio disagreement. Grounded: the LLM chooses between
+    the two real candidates instead of generating freely."""
+    if base_text and base_text in context_text:
+        marked = context_text.replace(base_text, f">>> {base_text} <<<", 1)
+    else:
+        marked = f"{context_text}\n\n[Marked]: >>> {base_text} <<<"
+    prompt = DISAGREE_PROMPT.format(base_text=base_text, audio_text=audio_text, context_marked=marked)
+    r = requests.post(
+        f"{ollama_url}/api/generate",
+        json={"model": model, "prompt": prompt, "stream": False,
+              "format": "json", "options": {"temperature": 0.0}},
+        timeout=180,
+    )
+    r.raise_for_status()
+    try:
+        return json.loads(r.json().get("response", "{}"))
+    except json.JSONDecodeError:
+        return {"is_error": None, "correction": "", "reason": "unparseable", "confidence": 0.0}
+
+
 def main():
     ap = argparse.ArgumentParser(description="LLM review of a flagged span.")
     ap.add_argument("--demo", action="store_true", help="run built-in test examples")
