@@ -14,7 +14,10 @@ from __future__ import annotations
 import argparse
 import json
 import time
+from collections import Counter
 from pathlib import Path
+
+from tqdm import tqdm
 
 from align import align, words_from_whisper
 from common import load_config, load_glossary
@@ -50,13 +53,6 @@ def review_file(audio, cfg, max_flags=None, do_summary=True):
 
 # ---------- Option A: annotate an existing transcript ----------
 
-def _context_for(segments, seg_idx, window=2):
-    if seg_idx is None:
-        return ""
-    lo, hi = max(0, seg_idx - window), min(len(segments), seg_idx + window + 1)
-    return " ".join(s["text"] for s in segments[lo:hi])
-
-
 _FILLER = {"oh", "or", "ok", "okay", "um", "uh", "mm", "hmm", "yeah", "yes", "no",
            "well", "so", "and", "the", "a", "an", "but", "it", "is", "i", "you",
            "right", "now", "then", "ah", "eh", "mhm"}
@@ -72,15 +68,47 @@ def _trivial_disagreement(base_text, audio_text):
     return False
 
 
+def _degenerate(text):
+    """True if OUR transcription text looks like a hallucination (non-Latin
+    gibberish or a repetition loop) — those are our failures, not real errors."""
+    toks = text.lower().split()
+    if not toks:
+        return True
+    if sum(1 for ch in text if ch.isalpha() and ord(ch) > 0x250) >= 3:
+        return True
+    c = Counter(toks)
+    return len(toks) >= 4 and c.most_common(1)[0][1] / len(toks) > 0.5
+
+
+def _context_for(segments, seg_idx, window=2):
+    if seg_idx is None:
+        return ""
+    lo, hi = max(0, seg_idx - window), min(len(segments), seg_idx + window + 1)
+    return " ".join(s["text"] for s in segments[lo:hi])
+
+
 def review_with_base(audio, base_path, cfg, do_summary=True):
+    print("Re-transcribing (or loading cache)…", flush=True)
     transcript, _ = cached_transcribe(audio, cfg)
     base = load_base(base_path)
+    print("Aligning transcript with audio…", flush=True)
     al = align(base["segments"], words_from_whisper(transcript))
 
+    min_conf = cfg.get("disagreement_min_confidence", 0.6)
+    cap = cfg.get("max_corrections_per_file", 40)
+    candidates = [f for f in al["flags"]
+                  if f["type"] == "disagreement"
+                  and not _trivial_disagreement(f["base_text"], f["audio_text"])
+                  and not _degenerate(f["audio_text"])
+                  and (f.get("our_conf") or 0) >= min_conf]
+    candidates.sort(key=lambda f: f.get("our_conf") or 0, reverse=True)
+    n_disagree = sum(1 for f in al["flags"] if f["type"] == "disagreement")
+    candidates = candidates[:cap]
+    print(f"{n_disagree} raw disagreements -> {len(candidates)} pass the quality gate "
+          f"(our confidence >= {min_conf}); reviewing…", flush=True)
+
     disagreements = []
-    for f in al["flags"]:
-        if f["type"] != "disagreement" or _trivial_disagreement(f["base_text"], f["audio_text"]):
-            continue
+    for f in tqdm(candidates, desc="LLM review", unit="flag"):
         ctx = _context_for(base["segments"], f.get("seg"))
         v = review_disagreement(f["base_text"], f["audio_text"], ctx,
                                 cfg["llm_model"], cfg["ollama_url"])
@@ -91,6 +119,7 @@ def review_with_base(audio, base_path, cfg, do_summary=True):
     omissions = [f for f in al["flags"] if f["type"] == "omission"]
     overlaps = [{"seg": i, "speaker": s["speaker"], "text": s["text"]}
                 for i, s in enumerate(base["segments"]) if s.get("interjection")]
+    print("Summarizing…", flush=True)
     base_text = " ".join(s["text"] for s in base["segments"])
     summary = summarize_text(base_text, cfg["llm_model"], cfg["ollama_url"]) \
         if do_summary else {"summary": "", "topics": []}

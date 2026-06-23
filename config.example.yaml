@@ -13,6 +13,8 @@ languages: ["en", "de"]
 low_confidence_threshold: 0.55   # word probability below this = suspect
 context_window_seconds: 20       # text context shown to the LLM around a span
 min_segment_gap_seconds: 0.5     # merge adjacent suspect words closer than this
+disagreement_min_confidence: 0.6 # only surface a disagreement if OUR re-transcription is this confident
+max_corrections_per_file: 40     # cap how many corrections get LLM-reviewed per file
 
 # --- Local LLM server ---
 ollama_url: "http://localhost:11434"

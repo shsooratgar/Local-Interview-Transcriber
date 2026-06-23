@@ -28,7 +28,10 @@ def _glossary_prompt(terms: list[str], max_chars: int = 600) -> str | None:
 
 
 def transcribe_audio(audio_path, model, language="auto", glossary_terms=None) -> dict:
-    opts = {"path_or_hf_repo": model, "word_timestamps": True}
+    # condition_on_previous_text=False curbs runaway repetition/hallucination loops;
+    # verbose=True streams segments so a long file shows live progress.
+    opts = {"path_or_hf_repo": model, "word_timestamps": True,
+            "condition_on_previous_text": False, "verbose": True}
     if language and language != "auto":
         opts["language"] = language
     prompt = _glossary_prompt(glossary_terms or [])

@@ -59,12 +59,14 @@ def align(base_segments, our_words, omission_min=5, base_only_min=5):
             for k in range(i2 - i1):
                 base_conf[i1 + k] = our_meta[j1 + k]["prob"]
         elif tag == "replace":
+            probs = [our_meta[k]["prob"] for k in range(j1, j2) if our_meta[k]["prob"] is not None]
             flags.append({
                 "type": "disagreement",
                 "seg": base_meta[i1]["seg"] if i1 < len(base_meta) else None,
                 "base_text": " ".join(m["orig"] for m in base_meta[i1:i2]),
                 "audio_text": " ".join(m["orig"] for m in our_meta[j1:j2]),
                 "start": our_meta[j1]["start"] if j1 < len(our_meta) else None,
+                "our_conf": round(sum(probs) / len(probs), 3) if probs else None,
             })
         elif tag == "insert" and (j2 - j1) >= omission_min:
             flags.append({

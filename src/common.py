@@ -23,6 +23,8 @@ DEFAULTS = {
     "low_confidence_threshold": 0.55,
     "context_window_seconds": 20,
     "min_segment_gap_seconds": 0.5,
+    "disagreement_min_confidence": 0.6,   # only surface a disagreement if OUR pass is this sure
+    "max_corrections_per_file": 40,       # cap LLM-reviewed corrections per file
     # local LLM server
     "ollama_url": "http://localhost:11434",
     # paths
