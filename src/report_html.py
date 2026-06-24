@@ -55,7 +55,7 @@ TEMPLATE = """<!doctype html>
  <audio id="p" controls preload="metadata" src="__AUDIO__"></audio>
 </header>
 <main>
- <p class="note">Hit ▶ (or click the blue time) to hear that moment, then mark each suggestion <b>keep</b> or <b>drop</b>. Use "Copy accepted" to export the ones you kept. Nothing here changes your transcript.</p>
+ <p class="note">Hit ▶ (or click the blue time) to hear that moment — playback starts ~5s earlier for context — then mark each suggestion <b>keep</b> or <b>drop</b>. Use "Copy accepted" to export the ones you kept. Nothing here changes your transcript.</p>
  <h2>Summary</h2>
  <p>__SUMMARY__</p>
  <ul>__TOPICS__</ul>
@@ -69,7 +69,8 @@ TEMPLATE = """<!doctype html>
 </main>
 <script>
  var p=document.getElementById('p');
- function seek(s){ if(s===null||s===undefined) return; p.currentTime=s; p.play(); }
+ var LEAD=5;
+ function seek(s){ if(s===null||s===undefined) return; p.currentTime=Math.max(0,s-LEAD); p.play(); }
  function mark(btn,val){ var tr=btn.closest('tr'); var nv=tr.getAttribute('data-state')===val?'':val; tr.setAttribute('data-state',nv); tr.querySelectorAll('.dec button').forEach(function(b){ b.classList.toggle('on', b===btn && nv!==''); }); updateTally(); }
  function updateTally(){ var rows=document.querySelectorAll('tr[data-flag]'); var k=0,d=0; rows.forEach(function(r){var s=r.getAttribute('data-state'); if(s==='keep')k++; else if(s==='drop')d++;}); document.getElementById('tally').textContent='kept '+k+' · dropped '+d+' · '+(rows.length-k-d)+' to review'; }
  function copyAccepted(){ var out=[]; document.querySelectorAll('tr[data-flag]').forEach(function(r){ if(r.getAttribute('data-state')==='keep') out.push((r.getAttribute('data-base')||'')+'  ->  '+(r.getAttribute('data-sug')||'')); }); if(!out.length){ alert('Nothing marked keep yet.'); return; } navigator.clipboard.writeText(out.join(String.fromCharCode(10))).then(function(){ alert('Copied '+out.length+' accepted item(s) to clipboard.'); }); }
