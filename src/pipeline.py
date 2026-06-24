@@ -22,7 +22,7 @@ from tqdm import tqdm
 from align import align, words_from_whisper
 from common import load_config, load_glossary
 from flag import find_suspects
-from llm_review import review_disagreement, review_span
+from llm_review import review_disagreement, review_recovered, review_span
 from summarize import summarize_text
 from transcribe import cached_transcribe
 from transcript_io import load_base
@@ -122,6 +122,22 @@ def review_with_base(audio, base_path, cfg, do_summary=True):
     omissions.sort(key=lambda x: x.get("start") if x.get("start") is not None else 0.0)
     overlaps = [{"seg": i, "speaker": s["speaker"], "text": s["text"]}
                 for i, s in enumerate(base["segments"]) if s.get("interjection")]
+
+    rec_flags = [f for f in al["flags"] if f["type"] == "recovered"
+                 and not _degenerate(f["audio_text"]) and (f.get("our_conf") or 0) >= min_conf]
+    rec_flags.sort(key=lambda f: f.get("our_conf") or 0, reverse=True)
+    if rec_flags:
+        print(f"{len(rec_flags)} recovered (dropped) passages; checking…", flush=True)
+    recovered = []
+    for f in tqdm(rec_flags[:cap], desc="recovered", unit="flag"):
+        ctx = _context_for(base["segments"], f.get("seg"))
+        v = review_recovered(f["base_text"], f["audio_text"], ctx, cfg["llm_model"], cfg["ollama_url"])
+        spk = base["segments"][f["seg"]]["speaker"] if f.get("seg") is not None else None
+        recovered.append({**f, "speaker": spk, "other_speaker": v.get("other_speaker"),
+                          "llm": {"correction": v.get("text") or f["audio_text"],
+                                  "reason": v.get("reason"), "confidence": v.get("confidence")}})
+    recovered.sort(key=lambda x: x.get("start") if x.get("start") is not None else 0.0)
+
     print("Summarizing…", flush=True)
     base_text = " ".join(s["text"] for s in base["segments"])
     summary = summarize_text(base_text, cfg["llm_model"], cfg["ollama_url"]) \
@@ -131,7 +147,7 @@ def review_with_base(audio, base_path, cfg, do_summary=True):
         "audio": str(audio), "base": str(base_path),
         "match_coverage": al["match_coverage"],
         "summary": summary, "disagreements": disagreements,
-        "omissions": omissions, "overlaps": overlaps,
+        "omissions": omissions, "overlaps": overlaps, "recovered": recovered,
     }
 
 

@@ -121,6 +121,41 @@ def review_disagreement(base_text, audio_text, context_text, model, ollama_url):
         return {"is_error": None, "correction": "", "reason": "unparseable", "confidence": 0.0}
 
 
+RECOVERED_PROMPT = """In an interview transcript, this spot was reduced to "{base_text}", but a second
+transcription of the same audio actually contains: "{audio_text}".
+
+Context (the spot is marked with >>> <<<):
+{context_marked}
+
+The transcript dropped this passage. Do two things:
+1) Give the cleaned recovered text (fix obvious slips, keep the wording, do NOT invent).
+2) Decide whether it reads like a DIFFERENT speaker's turn or interjection, rather than a
+   continuation of the current speaker.
+
+Respond with ONLY this JSON:
+{{"text": "cleaned recovered text", "other_speaker": true or false, "reason": "short note", "confidence": 0.0 to 1.0}}"""
+
+
+def review_recovered(base_text, audio_text, context_text, model, ollama_url):
+    """Clean a dropped/recovered passage and judge whether it's another speaker."""
+    if base_text and base_text in context_text:
+        marked = context_text.replace(base_text, f">>> {base_text} <<<", 1)
+    else:
+        marked = f"{context_text}\n\n[Spot]: >>> {base_text} <<<"
+    prompt = RECOVERED_PROMPT.format(base_text=base_text, audio_text=audio_text, context_marked=marked)
+    r = requests.post(
+        f"{ollama_url}/api/generate",
+        json={"model": model, "prompt": prompt, "stream": False,
+              "format": "json", "options": {"temperature": 0.0}},
+        timeout=180,
+    )
+    r.raise_for_status()
+    try:
+        return json.loads(r.json().get("response", "{}"))
+    except json.JSONDecodeError:
+        return {"text": audio_text, "other_speaker": None, "reason": "unparseable", "confidence": 0.0}
+
+
 def main():
     ap = argparse.ArgumentParser(description="LLM review of a flagged span.")
     ap.add_argument("--demo", action="store_true", help="run built-in test examples")

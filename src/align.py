@@ -70,8 +70,12 @@ def align(base_segments, our_words, omission_min=5, base_only_min=5):
                 base_conf[i1 + k] = our_meta[j1 + k]["prob"]
         elif tag == "replace":
             probs = [our_meta[k]["prob"] for k in range(j1, j2) if our_meta[k]["prob"] is not None]
+            blen, alen = i2 - i1, j2 - j1
+            # a short transcript span aligned to a much longer audio span = noScribe
+            # collapsed/dropped a chunk (often another speaker's turn), not a word-fix
+            ftype = "recovered" if (blen <= 2 and alen - blen >= 3) else "disagreement"
             flags.append({
-                "type": "disagreement",
+                "type": ftype,
                 "seg": base_meta[i1]["seg"] if i1 < len(base_meta) else None,
                 "base_text": " ".join(m["orig"] for m in base_meta[i1:i2]),
                 "audio_text": " ".join(m["orig"] for m in our_meta[j1:j2]),

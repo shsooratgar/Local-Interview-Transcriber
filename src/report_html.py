@@ -41,6 +41,7 @@ TEMPLATE = """<!doctype html>
  .ts{color:#0066cc;cursor:pointer;font-variant-numeric:tabular-nums;font-weight:600;vertical-align:middle}
  .ts:hover{text-decoration:underline}
  .sug{color:#137a3e}
+ .spk{color:#9a3412;font-size:11px;font-weight:600;white-space:nowrap}
  .edit{width:170px;font-size:13px;padding:4px 6px;border:1px solid #cdd6e4;border-radius:6px}
  .dec{white-space:nowrap;width:112px}
  .dec button{font-size:12px;padding:3px 9px;margin-right:4px;border:1px solid #ccc;background:#fff;border-radius:6px;cursor:pointer}
@@ -65,6 +66,8 @@ TEMPLATE = """<!doctype html>
  <h2>Suggested corrections</h2>
  <div class="bar"><span id="tally">…</span><button onclick="applyChanges()">Apply → corrected .docx</button><button class="alt" onclick="copyAccepted()">Copy accepted</button><button class="alt" onclick="resetState()">Reset choices</button></div>
  <table><tr><th class="t">time</th><th>speaker</th><th>in transcript</th><th>suggested (from audio)</th><th>your correction</th><th></th></tr>__CORR__</table>
+ <h2>Recovered passages <small>(transcript dropped these — often another speaker)</small></h2>
+ <table><tr><th class="t">time</th><th>speaker</th><th>in transcript</th><th>recovered (from audio)</th><th>your correction</th><th></th></tr>__REC__</table>
  <h2>Possible omissions <small>(heard in audio, missing from transcript)</small></h2>
  <table><tr><th class="t">time</th><th>heard in audio</th><th>your correction</th><th></th></tr>__OM__</table>
  <h2>Overlapping speech to verify</h2>
@@ -167,6 +170,21 @@ def write_html_report(audio_path, review, out_path):
                  f'{_edit_cell()}{_dec()}</tr>')
     corr = corr or '<tr><td colspan="6">None found.</td></tr>'
 
+    rec = ""
+    for i, d in enumerate(review.get("recovered", [])):
+        base = _esc(d.get("base_text"))
+        sug = _esc((d.get("llm") or {}).get("correction") or d.get("audio_text"))
+        in_tr = _ctx_html(d.get("base_ctx"), d.get("base_text"))
+        audio = _ctx_html(d.get("audio_ctx"),
+                          (d.get("llm") or {}).get("correction") or d.get("audio_text"), cls="sug")
+        badge = ' <span class="spk">(other speaker?)</span>' if d.get("other_speaker") else ""
+        rec += (f'<tr data-flag data-key="r{i}" data-base="{base}" data-sug="{sug}">'
+                f'{_time_cell(d.get("start"))}'
+                f'<td>{_esc(d.get("speaker"))}</td><td>{in_tr}</td>'
+                f'<td>{audio}{badge}</td>'
+                f'{_edit_cell()}{_dec()}</tr>')
+    rec = rec or '<tr><td colspan="6">None found.</td></tr>'
+
     om = ""
     for i, o in enumerate(review.get("omissions", [])):
         txt = _esc(o.get("audio_text"))
@@ -191,6 +209,7 @@ def write_html_report(audio_path, review, out_path):
            .replace("__SUMMARY__", _esc(summ.get("summary")))
            .replace("__TOPICS__", topics)
            .replace("__CORR__", corr)
+           .replace("__REC__", rec)
            .replace("__OM__", om)
            .replace("__OV__", ov))
     out_path.write_text(doc, encoding="utf-8")

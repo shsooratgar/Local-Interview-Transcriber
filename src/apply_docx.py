@@ -2,13 +2,14 @@
 """Apply accepted review decisions to a COPY of the base .docx, producing a
 corrected document. The original is never modified.
 
-decisions map (from the viewer): { "c<i>": {"s": "keep"|"drop"|"", "e": "<edit>"}, "o<i>": {...} }
-where c<i> indexes review["disagreements"][i] and o<i> indexes review["omissions"][i].
+decisions map (from the viewer): { "<key>": {"s": "keep"|"drop"|"", "e": "<edit>"} }
+where  c<i> -> review["disagreements"][i]
+       r<i> -> review["recovered"][i]   (replace the dropped remnant)
+       o<i> -> review["omissions"][i]   (insert the missing passage)
 
-v1 scope:
-  - corrections  -> replace the first occurrence of base_text with your text
-  - omissions    -> best-effort insert after the preceding-context anchor
-Anything that can't be located is reported as 'skipped' (so you can do it by hand).
+Replacements are targeted to the exact paragraph (via each flag's segment index),
+falling back to a first-match search. Anything that can't be located is reported
+as 'skipped' so you can do it by hand.
 """
 from __future__ import annotations
 
@@ -16,6 +17,8 @@ import json
 from pathlib import Path
 
 from docx import Document
+
+from transcript_io import _parse_turn
 
 
 def _final_text(flag, dec):
@@ -34,9 +37,7 @@ def _rewrite(p, new_full):
 
 
 def _dedup_boundary(before, new, after):
-    """Drop a boundary word of `new` if it just repeats the adjacent transcript
-    word, so replacing 'reinforced film' with 'reinforcement learning' next to an
-    existing 'learning' doesn't produce '...learning learning'."""
+    """Drop a boundary word of `new` if it just repeats the adjacent transcript word."""
     nw, bw, aw = new.split(), before.split(), after.split()
     if nw and aw and nw[-1].lower().strip(".,!?") == aw[0].lower().strip(".,!?"):
         nw = nw[:-1]
@@ -45,60 +46,80 @@ def _dedup_boundary(before, new, after):
     return " ".join(nw)
 
 
+def _replace_in_para(p, old, new):
+    if not old or old not in p.text:
+        return False
+    full = p.text
+    idx = full.find(old)
+    before, after = full[:idx], full[idx + len(old):]
+    _rewrite(p, before + _dedup_boundary(before, new, after) + after)
+    return True
+
+
 def _replace_first(paragraphs, old, new):
-    if not old:
-        return False
     for p in paragraphs:
-        idx = p.text.find(old)
-        if idx == -1:
-            continue
-        full = p.text
-        before, after = full[:idx], full[idx + len(old):]
-        _rewrite(p, before + _dedup_boundary(before, new, after) + after)
-        return True
-    return False
-
-
-def _insert_after_anchor(paragraphs, before_ctx, text):
-    anchor = " ".join((before_ctx or "").split()[-4:]).strip()
-    if not anchor:
-        return False
-    for p in paragraphs:
-        if anchor in p.text:
-            _rewrite(p, p.text.replace(anchor, f"{anchor} {text}", 1))
+        if _replace_in_para(p, old, new):
             return True
     return False
+
+
+def _seg_to_para(doc):
+    """Map each flattened base-segment index to its paragraph (same order as
+    transcript_io parses the docx) so replacements hit the right spot."""
+    mapping = []
+    for p in doc.paragraphs:
+        t = p.text.strip()
+        if not t:
+            continue
+        for _ in _parse_turn(t):
+            mapping.append(p)
+    return mapping
 
 
 def apply_decisions(base_docx, review, decisions, out_path):
     doc = Document(str(base_docx))
     paras = doc.paragraphs
-    applied, skipped = 0, 0
+    s2p = _seg_to_para(doc)
+    counts = {"applied": 0, "skipped": 0}
+
+    def do_replace(flag, dec):
+        new = _final_text(flag, dec)
+        seg = flag.get("seg")
+        ok = False
+        if new:
+            if seg is not None and seg < len(s2p):
+                ok = _replace_in_para(s2p[seg], flag.get("base_text", ""), new)
+            if not ok:
+                ok = _replace_first(paras, flag.get("base_text", ""), new)
+        counts["applied" if ok else "skipped"] += 1
 
     for i, d in enumerate(review.get("disagreements", [])):
         dec = decisions.get(f"c{i}")
-        if not dec or dec.get("s") != "keep":
-            continue
-        new = _final_text(d, dec)
-        if new and _replace_first(paras, d.get("base_text", ""), new):
-            applied += 1
-        else:
-            skipped += 1
+        if dec and dec.get("s") == "keep":
+            do_replace(d, dec)
+
+    for i, d in enumerate(review.get("recovered", [])):
+        dec = decisions.get(f"r{i}")
+        if dec and dec.get("s") == "keep":
+            do_replace(d, dec)
 
     for i, o in enumerate(review.get("omissions", [])):
         dec = decisions.get(f"o{i}")
         if not dec or dec.get("s") != "keep":
             continue
         text = (dec.get("e") or "").strip() or o.get("audio_text", "")
-        if text and _insert_after_anchor(paras, (o.get("base_ctx") or {}).get("before", ""), text):
-            applied += 1
+        seg = o.get("seg")
+        if text and seg is not None and seg < len(s2p):
+            p = s2p[seg]
+            _rewrite(p, (p.text + " " + text).strip())
+            counts["applied"] += 1
         else:
-            skipped += 1
+            counts["skipped"] += 1
 
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(out_path))
-    return {"applied": applied, "skipped": skipped, "out": str(out_path)}
+    return {**counts, "out": str(out_path)}
 
 
 if __name__ == "__main__":

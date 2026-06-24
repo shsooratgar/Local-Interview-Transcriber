@@ -79,6 +79,20 @@ def write_docx_report(base_docx, review, out_path):
     else:
         doc.add_paragraph("None found.")
 
+    doc.add_heading("Recovered passages (transcript dropped these — often another speaker)", level=2)
+    rec = review.get("recovered", [])
+    if rec:
+        t = _grid(doc, ["Time", "Speaker", "In transcript", "Recovered (from audio)", "Other speaker?"])
+        for d in rec:
+            c = t.add_row().cells
+            c[0].text = _mmss(d.get("start"))
+            c[1].text = str(d.get("speaker") or "")
+            c[2].text = d.get("base_text", "")
+            c[3].text = (d.get("llm", {}).get("correction") or d.get("audio_text", ""))
+            c[4].text = "yes" if d.get("other_speaker") else ""
+    else:
+        doc.add_paragraph("None found.")
+
     doc.add_heading("Possible omissions (heard in audio, missing from transcript)", level=2)
     oms = review.get("omissions", [])
     if oms:
