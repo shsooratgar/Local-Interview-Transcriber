@@ -2,9 +2,10 @@
 """Standalone, offline HTML review cockpit.
 
 - Audio player on top; every suggested correction / omission has a small ▶ play
-  button and a clickable time that seek the audio to that exact moment.
-- keep / drop triage on each item, a running tally, and "Copy accepted" to
-  export the ones you kept.
+  button and a clickable time that seek the audio to ~5s before that moment.
+- keep / drop triage, plus a "your correction" box per row for when both the
+  transcript and the audio suggestion are wrong (typing auto-keeps the row).
+- A running tally, and "Copy accepted" exports your edit (or the suggestion).
 
 For reliable local playback the audio is transcoded to a small mono .mp3 placed
 NEXT TO the html (same folder, bare filename) — browsers refuse cross-folder
@@ -28,7 +29,7 @@ TEMPLATE = """<!doctype html>
  header{position:sticky;top:0;background:#fff;border-bottom:1px solid #ddd;padding:12px 20px;box-shadow:0 1px 4px rgba(0,0,0,.06);z-index:5}
  header b{font-size:16px}
  audio{width:100%;margin-top:10px}
- main{max-width:980px;margin:0 auto;padding:20px}
+ main{max-width:1100px;margin:0 auto;padding:20px}
  h2{margin-top:30px;border-bottom:2px solid #eee;padding-bottom:5px;font-size:17px}
  h2 small{color:#888;font-weight:400;font-size:13px}
  table{border-collapse:collapse;width:100%}
@@ -40,6 +41,7 @@ TEMPLATE = """<!doctype html>
  .ts{color:#0066cc;cursor:pointer;font-variant-numeric:tabular-nums;font-weight:600;vertical-align:middle}
  .ts:hover{text-decoration:underline}
  .sug{color:#137a3e}
+ .edit{width:170px;font-size:13px;padding:4px 6px;border:1px solid #cdd6e4;border-radius:6px}
  .dec{white-space:nowrap;width:112px}
  .dec button{font-size:12px;padding:3px 9px;margin-right:4px;border:1px solid #ccc;background:#fff;border-radius:6px;cursor:pointer}
  .dec button.on{border-color:#0066cc;background:#eaf3ff;font-weight:600}
@@ -55,15 +57,15 @@ TEMPLATE = """<!doctype html>
  <audio id="p" controls preload="metadata" src="__AUDIO__"></audio>
 </header>
 <main>
- <p class="note">Hit ▶ (or click the blue time) to hear that moment — playback starts ~5s earlier for context — then mark each suggestion <b>keep</b> or <b>drop</b>. Use "Copy accepted" to export the ones you kept. Nothing here changes your transcript.</p>
+ <p class="note">Hit ▶ (or click the blue time) to hear that moment — playback starts ~5s earlier for context. Mark each row <b>keep</b> or <b>drop</b>; if both the transcript and the suggestion are wrong, type your own in <b>your correction</b> (that auto-keeps the row). "Copy accepted" exports everything you kept. Nothing here changes your transcript.</p>
  <h2>Summary</h2>
  <p>__SUMMARY__</p>
  <ul>__TOPICS__</ul>
  <h2>Suggested corrections</h2>
  <div class="bar"><span id="tally">…</span><button onclick="copyAccepted()">Copy accepted</button></div>
- <table><tr><th class="t">time</th><th>speaker</th><th>in transcript</th><th>suggested (from audio)</th><th>conf</th><th></th></tr>__CORR__</table>
+ <table><tr><th class="t">time</th><th>speaker</th><th>in transcript</th><th>suggested (from audio)</th><th>conf</th><th>your correction</th><th></th></tr>__CORR__</table>
  <h2>Possible omissions <small>(heard in audio, missing from transcript)</small></h2>
- <table><tr><th class="t">time</th><th>heard in audio</th><th></th></tr>__OM__</table>
+ <table><tr><th class="t">time</th><th>heard in audio</th><th>your correction</th><th></th></tr>__OM__</table>
  <h2>Overlapping speech to verify</h2>
  <ul>__OV__</ul>
 </main>
@@ -72,8 +74,9 @@ TEMPLATE = """<!doctype html>
  var LEAD=5;
  function seek(s){ if(s===null||s===undefined) return; p.currentTime=Math.max(0,s-LEAD); p.play(); }
  function mark(btn,val){ var tr=btn.closest('tr'); var nv=tr.getAttribute('data-state')===val?'':val; tr.setAttribute('data-state',nv); tr.querySelectorAll('.dec button').forEach(function(b){ b.classList.toggle('on', b===btn && nv!==''); }); updateTally(); }
+ function onedit(inp){ var tr=inp.closest('tr'); if(inp.value.trim()){ tr.setAttribute('data-state','keep'); tr.querySelectorAll('.dec button').forEach(function(b){ b.classList.toggle('on', b.textContent==='keep'); }); updateTally(); } }
  function updateTally(){ var rows=document.querySelectorAll('tr[data-flag]'); var k=0,d=0; rows.forEach(function(r){var s=r.getAttribute('data-state'); if(s==='keep')k++; else if(s==='drop')d++;}); document.getElementById('tally').textContent='kept '+k+' · dropped '+d+' · '+(rows.length-k-d)+' to review'; }
- function copyAccepted(){ var out=[]; document.querySelectorAll('tr[data-flag]').forEach(function(r){ if(r.getAttribute('data-state')==='keep') out.push((r.getAttribute('data-base')||'')+'  ->  '+(r.getAttribute('data-sug')||'')); }); if(!out.length){ alert('Nothing marked keep yet.'); return; } navigator.clipboard.writeText(out.join(String.fromCharCode(10))).then(function(){ alert('Copied '+out.length+' accepted item(s) to clipboard.'); }); }
+ function copyAccepted(){ var out=[]; document.querySelectorAll('tr[data-flag]').forEach(function(r){ if(r.getAttribute('data-state')!=='keep') return; var inp=r.querySelector('input.edit'); var custom=inp&&inp.value.trim()?inp.value.trim():(r.getAttribute('data-sug')||''); out.push((r.getAttribute('data-base')||'')+'  ->  '+custom); }); if(!out.length){ alert('Nothing marked keep yet.'); return; } navigator.clipboard.writeText(out.join(String.fromCharCode(10))).then(function(){ alert('Copied '+out.length+' accepted item(s) to clipboard.'); }); }
  updateTally();
 </script>
 </body></html>"""
@@ -95,6 +98,10 @@ def _time_cell(start):
         return '<td class="t">—</td>'
     return (f'<td class="t"><button class="play" onclick="seek({start})" aria-label="play here">▶</button>'
             f'<span class="ts" onclick="seek({start})">{_mmss(start)}</span></td>')
+
+
+def _edit_cell():
+    return '<td><input class="edit" type="text" oninput="onedit(this)" placeholder="optional override"></td>'
 
 
 def _dec():
@@ -136,16 +143,17 @@ def write_html_report(audio_path, review, out_path):
                  f'{_time_cell(d.get("start"))}'
                  f'<td>{_esc(d.get("speaker"))}</td><td>{base}</td>'
                  f'<td class="sug">{sug}</td>'
-                 f'<td>{_esc((d.get("llm") or {}).get("confidence"))}</td>{_dec()}</tr>')
-    corr = corr or '<tr><td colspan="6">None found.</td></tr>'
+                 f'<td>{_esc((d.get("llm") or {}).get("confidence"))}</td>'
+                 f'{_edit_cell()}{_dec()}</tr>')
+    corr = corr or '<tr><td colspan="7">None found.</td></tr>'
 
     om = ""
     for o in review.get("omissions", []):
         txt = _esc(o.get("audio_text"))
         om += (f'<tr data-flag data-base="[omission]" data-sug="{txt}">'
                f'{_time_cell(o.get("start"))}'
-               f'<td>{txt}</td>{_dec()}</tr>')
-    om = om or '<tr><td colspan="3">None found.</td></tr>'
+               f'<td>{txt}</td>{_edit_cell()}{_dec()}</tr>')
+    om = om or '<tr><td colspan="4">None found.</td></tr>'
 
     ov = "".join(f'<li><b>{_esc(o.get("speaker"))}:</b> {_esc(o.get("text"))}</li>'
                  for o in review.get("overlaps", [])) or "<li>None marked.</li>"
