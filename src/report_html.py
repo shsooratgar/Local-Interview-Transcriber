@@ -5,12 +5,18 @@
   time that seeks the audio to that exact moment.
 - keep / drop triage on each item, a running tally, and "Copy accepted" to
   export the ones you kept.
-Self-contained: inline CSS + JS, audio referenced by relative path, no internet.
+
+For reliable local playback the audio is transcoded to a small mono .mp3 placed
+NEXT TO the html (same folder, bare filename) — browsers refuse cross-folder
+file:// media and many won't decode .m4a/AAC. Falls back to a relative path if
+ffmpeg isn't available.
 """
 from __future__ import annotations
 
 import html
 import os
+import shutil
+import subprocess
 from pathlib import Path
 from urllib.parse import quote
 
@@ -89,10 +95,30 @@ def _dec():
             '<button onclick="mark(this,\'drop\')">drop</button></td>')
 
 
+def _web_audio_src(audio_path, out_dir):
+    """Return an <audio> src browsers reliably play from a local file: a mono
+    .mp3 placed next to the report (bare filename). Cached. Falls back to a
+    relative path to the original if ffmpeg is unavailable."""
+    audio_path = Path(audio_path)
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg:
+        mp3 = Path(out_dir) / (audio_path.stem + ".audio.mp3")
+        if not mp3.exists():
+            try:
+                subprocess.run([ffmpeg, "-y", "-i", str(audio_path), "-ac", "1",
+                                "-b:a", "64k", "-vn", str(mp3)],
+                               check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                mp3 = None
+        if mp3 and mp3.exists():
+            return quote(mp3.name)
+    return quote(os.path.relpath(audio_path.resolve(), Path(out_dir)))
+
+
 def write_html_report(audio_path, review, out_path):
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    audio_rel = quote(os.path.relpath(Path(audio_path).resolve(), out_path.parent))
+    audio_rel = _web_audio_src(audio_path, out_path.parent)
     summ = review.get("summary", {}) or {}
 
     corr = ""
