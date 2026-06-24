@@ -6,10 +6,10 @@ TEXT — no timestamps needed in the base. Surfaces:
   - omission flags     : audio has a chunk the base lacks -> likely dropped passage
   - base_only flags    : base has a chunk the audio lacks -> noScribe extra / our miss
 
-and carries per-word confidence from the audio onto the base words. The
-match-coverage metric also tells us how independent our pass is from noScribe
-(too-high coverage would mean the two passes are near-identical and the
-disagreement signal is weak).
+Each flag carries a few words of context on both sides (base_ctx / audio_ctx) so
+a reviewer can read the span inside its sentence. Per-word confidence from the
+audio is carried onto the base words, and match_coverage reports how independent
+our pass is from noScribe.
 
     python src/align.py data/testsets/sample_transcript.docx output/sample_audio.whisper.json
 """
@@ -24,6 +24,7 @@ from pathlib import Path
 from transcript_io import load_base, strip_pauses
 
 _WORD = re.compile(r"\w+", re.UNICODE)
+CONTEXT_WORDS = 6
 
 
 def _tokens(text):
@@ -35,6 +36,15 @@ def words_from_whisper(transcript):
     for seg in transcript.get("segments", []):
         out += seg.get("words") or []
     return out
+
+
+def _ctx(meta, lo, hi, n=CONTEXT_WORDS):
+    """{before, span, after} of original-cased words around meta[lo:hi]."""
+    return {
+        "before": " ".join(m["orig"] for m in meta[max(0, lo - n):lo]),
+        "span": " ".join(m["orig"] for m in meta[lo:hi]),
+        "after": " ".join(m["orig"] for m in meta[hi:hi + n]),
+    }
 
 
 def align(base_segments, our_words, omission_min=5, base_only_min=5):
@@ -67,15 +77,18 @@ def align(base_segments, our_words, omission_min=5, base_only_min=5):
                 "audio_text": " ".join(m["orig"] for m in our_meta[j1:j2]),
                 "start": our_meta[j1]["start"] if j1 < len(our_meta) else None,
                 "our_conf": round(sum(probs) / len(probs), 3) if probs else None,
+                "base_ctx": _ctx(base_meta, i1, i2),
+                "audio_ctx": _ctx(our_meta, j1, j2),
             })
         elif tag == "insert" and (j2 - j1) >= omission_min:
             flags.append({
                 "type": "omission",
-                "seg": base_meta[i1]["seg"] if i1 < len(base_meta)
-                else (base_meta[-1]["seg"] if base_meta else None),
+                "seg": base_meta[i1]["seg"] if i1 < len(base_meta) else (base_meta[-1]["seg"] if base_meta else None),
                 "base_text": "",
                 "audio_text": " ".join(m["orig"] for m in our_meta[j1:j2]),
                 "start": our_meta[j1]["start"] if j1 < len(our_meta) else None,
+                "base_ctx": _ctx(base_meta, i1, i1),
+                "audio_ctx": _ctx(our_meta, j1, j2),
             })
         elif tag == "delete" and (i2 - i1) >= base_only_min:
             flags.append({
@@ -84,14 +97,14 @@ def align(base_segments, our_words, omission_min=5, base_only_min=5):
                 "base_text": " ".join(m["orig"] for m in base_meta[i1:i2]),
                 "audio_text": "",
                 "start": None,
+                "base_ctx": _ctx(base_meta, i1, i2),
+                "audio_ctx": _ctx(our_meta, j1, j1),
             })
 
     coverage = sum(1 for c in base_conf if c is not None) / max(1, len(base_norm))
     return {
-        "flags": flags,
-        "base_conf": base_conf,
-        "n_base_tokens": len(base_norm),
-        "n_our_tokens": len(our_norm),
+        "flags": flags, "base_conf": base_conf,
+        "n_base_tokens": len(base_norm), "n_our_tokens": len(our_norm),
         "match_coverage": round(coverage, 3),
     }
 
@@ -101,17 +114,15 @@ def main():
     ap.add_argument("base", help="noScribe .docx (or other base format)")
     ap.add_argument("whisper_json", help="our re-transcription (.whisper.json)")
     args = ap.parse_args()
-
     base = load_base(args.base)
     our = json.loads(Path(args.whisper_json).read_text())
     res = align(base["segments"], words_from_whisper(our))
-
+    types = {}
+    for f in res["flags"]:
+        types[f["type"]] = types.get(f["type"], 0) + 1
     print(f"base_tokens={res['n_base_tokens']}  our_tokens={res['n_our_tokens']}  "
           f"match_coverage={res['match_coverage']}")
-    print(f"{len(res['flags'])} flags:")
-    for f in res["flags"]:
-        loc = f"{f['start']:.0f}s" if f.get("start") is not None else "  -"
-        print(f"  [{loc}] {f['type']:>12} | base={f['base_text']!r}  audio={f['audio_text']!r}")
+    print(f"{len(res['flags'])} flags: {types}")
 
 
 if __name__ == "__main__":

@@ -93,6 +93,17 @@ def _esc(x):
     return html.escape("" if x is None else str(x))
 
 
+def _ctx_html(ctx, span_text, cls=""):
+    """Render '<context before> <b>span</b> <context after>'. Falls back to just
+    the bold span if no context is available (older reviews without *_ctx)."""
+    if not ctx:
+        return f'<b class="{cls}">{_esc(span_text)}</b>' if span_text else ""
+    before, after = _esc(ctx.get("before")), _esc(ctx.get("after"))
+    span = _esc(span_text if span_text is not None else ctx.get("span"))
+    inner = f'<b class="{cls}">{span}</b>' if span else '<b>[missing]</b>'
+    return f"{before} {inner} {after}".strip()
+
+
 def _time_cell(start):
     if start is None:
         return '<td class="t">—</td>'
@@ -139,10 +150,13 @@ def write_html_report(audio_path, review, out_path):
     for d in review.get("disagreements", []):
         base = _esc(d.get("base_text"))
         sug = _esc((d.get("llm") or {}).get("correction") or d.get("audio_text"))
+        in_tr = _ctx_html(d.get("base_ctx"), d.get("base_text"))
+        audio = _ctx_html(d.get("audio_ctx"),
+                          (d.get("llm") or {}).get("correction") or d.get("audio_text"), cls="sug")
         corr += (f'<tr data-flag data-base="{base}" data-sug="{sug}">'
                  f'{_time_cell(d.get("start"))}'
-                 f'<td>{_esc(d.get("speaker"))}</td><td>{base}</td>'
-                 f'<td class="sug">{sug}</td>'
+                 f'<td>{_esc(d.get("speaker"))}</td><td>{in_tr}</td>'
+                 f'<td>{audio}</td>'
                  f'<td>{_esc((d.get("llm") or {}).get("confidence"))}</td>'
                  f'{_edit_cell()}{_dec()}</tr>')
     corr = corr or '<tr><td colspan="7">None found.</td></tr>'
@@ -150,9 +164,10 @@ def write_html_report(audio_path, review, out_path):
     om = ""
     for o in review.get("omissions", []):
         txt = _esc(o.get("audio_text"))
+        heard = _ctx_html(o.get("audio_ctx"), o.get("audio_text"))
         om += (f'<tr data-flag data-base="[omission]" data-sug="{txt}">'
                f'{_time_cell(o.get("start"))}'
-               f'<td>{txt}</td>{_edit_cell()}{_dec()}</tr>')
+               f'<td>{heard}</td>{_edit_cell()}{_dec()}</tr>')
     om = om or '<tr><td colspan="4">None found.</td></tr>'
 
     ov = "".join(f'<li><b>{_esc(o.get("speaker"))}:</b> {_esc(o.get("text"))}</li>'
