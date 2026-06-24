@@ -64,8 +64,12 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main():
     if len(sys.argv) < 2:
-        raise SystemExit('usage: python src/serve_review.py "<stem or .review.json>"')
-    review_path = _resolve_review(sys.argv[1])
+        reviews = sorted(OUT.glob("*.review.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if not reviews:
+            raise SystemExit("No reviews in output/. Run the pipeline on a file first.")
+        review_path = reviews[0]
+    else:
+        review_path = _resolve_review(sys.argv[1])
     review = json.loads(review_path.read_text())
     html = write_html_report(review["audio"], review,
                              OUT / (Path(review["audio"]).stem + ".review.html"))
