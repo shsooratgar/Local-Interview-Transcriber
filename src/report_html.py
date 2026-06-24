@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Standalone, offline HTML review cockpit.
 
-- Audio player on top; every suggested correction / omission has a clickable
-  time that seeks the audio to that exact moment.
+- Audio player on top; every suggested correction / omission has a small ▶ play
+  button and a clickable time that seek the audio to that exact moment.
 - keep / drop triage on each item, a running tally, and "Copy accepted" to
   export the ones you kept.
 
@@ -34,8 +34,11 @@ TEMPLATE = """<!doctype html>
  table{border-collapse:collapse;width:100%}
  th,td{text-align:left;padding:7px 9px;border-bottom:1px solid #eee;vertical-align:top}
  th{color:#555;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
- .t{white-space:nowrap;color:#0066cc;cursor:pointer;font-variant-numeric:tabular-nums;width:56px;font-weight:600}
- .t:hover{text-decoration:underline}
+ .t{white-space:nowrap;width:96px}
+ .play{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;margin-right:7px;padding:0;border:1px solid #cdd6e4;background:#fff;color:#0066cc;border-radius:50%;cursor:pointer;font-size:9px;line-height:1;vertical-align:middle}
+ .play:hover{background:#0066cc;color:#fff;border-color:#0066cc}
+ .ts{color:#0066cc;cursor:pointer;font-variant-numeric:tabular-nums;font-weight:600;vertical-align:middle}
+ .ts:hover{text-decoration:underline}
  .sug{color:#137a3e}
  .dec{white-space:nowrap;width:112px}
  .dec button{font-size:12px;padding:3px 9px;margin-right:4px;border:1px solid #ccc;background:#fff;border-radius:6px;cursor:pointer}
@@ -52,7 +55,7 @@ TEMPLATE = """<!doctype html>
  <audio id="p" controls preload="metadata" src="__AUDIO__"></audio>
 </header>
 <main>
- <p class="note">Click any blue time to hear that moment, then mark each suggestion <b>keep</b> or <b>drop</b>. Use "Copy accepted" to export the ones you kept. Nothing here changes your transcript.</p>
+ <p class="note">Hit ▶ (or click the blue time) to hear that moment, then mark each suggestion <b>keep</b> or <b>drop</b>. Use "Copy accepted" to export the ones you kept. Nothing here changes your transcript.</p>
  <h2>Summary</h2>
  <p>__SUMMARY__</p>
  <ul>__TOPICS__</ul>
@@ -86,8 +89,11 @@ def _esc(x):
     return html.escape("" if x is None else str(x))
 
 
-def _click(start):
-    return f' onclick="seek({start})"' if start is not None else ""
+def _time_cell(start):
+    if start is None:
+        return '<td class="t">—</td>'
+    return (f'<td class="t"><button class="play" onclick="seek({start})" aria-label="play here">▶</button>'
+            f'<span class="ts" onclick="seek({start})">{_mmss(start)}</span></td>')
 
 
 def _dec():
@@ -126,7 +132,7 @@ def write_html_report(audio_path, review, out_path):
         base = _esc(d.get("base_text"))
         sug = _esc((d.get("llm") or {}).get("correction") or d.get("audio_text"))
         corr += (f'<tr data-flag data-base="{base}" data-sug="{sug}">'
-                 f'<td class="t"{_click(d.get("start"))}>{_mmss(d.get("start"))}</td>'
+                 f'{_time_cell(d.get("start"))}'
                  f'<td>{_esc(d.get("speaker"))}</td><td>{base}</td>'
                  f'<td class="sug">{sug}</td>'
                  f'<td>{_esc((d.get("llm") or {}).get("confidence"))}</td>{_dec()}</tr>')
@@ -136,7 +142,7 @@ def write_html_report(audio_path, review, out_path):
     for o in review.get("omissions", []):
         txt = _esc(o.get("audio_text"))
         om += (f'<tr data-flag data-base="[omission]" data-sug="{txt}">'
-               f'<td class="t"{_click(o.get("start"))}>{_mmss(o.get("start"))}</td>'
+               f'{_time_cell(o.get("start"))}'
                f'<td>{txt}</td>{_dec()}</tr>')
     om = om or '<tr><td colspan="3">None found.</td></tr>'
 
