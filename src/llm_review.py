@@ -89,8 +89,11 @@ DISAGREE_PROMPT = """An automatic transcript may contain a mis-hearing. For the 
 Context (the suspected part is marked with >>> <<<):
 {context_marked}
 
-If the audio version is clearly the correct wording (a genuine fix), return it as the correction
-(lightly cleaned for punctuation/casing). If the transcript is actually fine, set is_error=false.
+Decide whether to correct the transcript here:
+- If the audio version is clearly the correct wording (a genuine fix), set is_error=true and return it (lightly cleaned for punctuation/casing).
+- If the ONLY difference is a spelling/orthography variant of the SAME word (British vs American English — e.g. favour/favor, colour/color, sulphate/sulfate, organise/organize, centre/center), set is_error=false. We do NOT care about spelling variants.
+- If it is a DIFFERENT word or changes the meaning (e.g. collar vs color, wipe vs white), set is_error=true.
+- If the transcript is fine, set is_error=false.
 Do NOT invent anything beyond these two candidates. Keep the original language.
 
 Respond with ONLY this JSON:

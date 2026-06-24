@@ -63,8 +63,8 @@ TEMPLATE = """<!doctype html>
  <p>__SUMMARY__</p>
  <ul>__TOPICS__</ul>
  <h2>Suggested corrections</h2>
- <div class="bar"><span id="tally">…</span><button onclick="copyAccepted()">Copy accepted</button><button class="alt" onclick="resetState()">Reset choices</button></div>
- <table><tr><th class="t">time</th><th>speaker</th><th>in transcript</th><th>suggested (from audio)</th><th>conf</th><th>your correction</th><th></th></tr>__CORR__</table>
+ <div class="bar"><span id="tally">…</span><button onclick="applyChanges()">Apply → corrected .docx</button><button class="alt" onclick="copyAccepted()">Copy accepted</button><button class="alt" onclick="resetState()">Reset choices</button></div>
+ <table><tr><th class="t">time</th><th>speaker</th><th>in transcript</th><th>suggested (from audio)</th><th>your correction</th><th></th></tr>__CORR__</table>
  <h2>Possible omissions <small>(heard in audio, missing from transcript)</small></h2>
  <table><tr><th class="t">time</th><th>heard in audio</th><th>your correction</th><th></th></tr>__OM__</table>
  <h2>Overlapping speech to verify</h2>
@@ -83,6 +83,7 @@ TEMPLATE = """<!doctype html>
  function loadState(){ try{ var m=JSON.parse(localStorage.getItem(SKEY)||'{}'); rows().forEach(function(r){ var v=m[r.getAttribute('data-key')]; if(!v) return; if(v.s){ r.setAttribute('data-state',v.s); r.querySelectorAll('.dec button').forEach(function(b){ b.classList.toggle('on', b.textContent===v.s); }); } var inp=r.querySelector('input.edit'); if(inp&&v.e) inp.value=v.e; }); }catch(e){} }
  function resetState(){ if(!confirm('Clear all your keep/drop/edits for this file?')) return; try{ localStorage.removeItem(SKEY); }catch(e){} location.reload(); }
  function copyAccepted(){ var out=[]; rows().forEach(function(r){ if(r.getAttribute('data-state')!=='keep') return; var inp=r.querySelector('input.edit'); var custom=inp&&inp.value.trim()?inp.value.trim():(r.getAttribute('data-sug')||''); out.push((r.getAttribute('data-base')||'')+'  ->  '+custom); }); if(!out.length){ alert('Nothing marked keep yet.'); return; } navigator.clipboard.writeText(out.join(String.fromCharCode(10))).then(function(){ alert('Copied '+out.length+' accepted item(s) to clipboard.'); }); }
+ function applyChanges(){ var dec={}; rows().forEach(function(r){ var st=r.getAttribute('data-state')||''; var inp=r.querySelector('input.edit'); var e=inp?inp.value:''; if(st||e) dec[r.getAttribute('data-key')]={s:st,e:e}; }); fetch('/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decisions:dec})}).then(function(r){return r.json();}).then(function(j){ if(j.error){alert('Apply failed: '+j.error);return;} alert('Created '+(j.out||'').split('/').pop()+'  ('+j.applied+' applied'+(j.skipped?', '+j.skipped+' need manual placement':'')+').'); }).catch(function(){ alert('Apply needs the local server — start it with serve_review.py (or the launcher).'); }); }
  loadState(); updateTally();
 </script>
 </body></html>"""
@@ -163,9 +164,8 @@ def write_html_report(audio_path, review, out_path):
                  f'{_time_cell(d.get("start"))}'
                  f'<td>{_esc(d.get("speaker"))}</td><td>{in_tr}</td>'
                  f'<td>{audio}</td>'
-                 f'<td>{_esc((d.get("llm") or {}).get("confidence"))}</td>'
                  f'{_edit_cell()}{_dec()}</tr>')
-    corr = corr or '<tr><td colspan="7">None found.</td></tr>'
+    corr = corr or '<tr><td colspan="6">None found.</td></tr>'
 
     om = ""
     for i, o in enumerate(review.get("omissions", [])):

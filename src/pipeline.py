@@ -117,6 +117,9 @@ def review_with_base(audio, base_path, cfg, do_summary=True):
             disagreements.append({**f, "speaker": spk, "llm": v})
 
     omissions = [f for f in al["flags"] if f["type"] == "omission"]
+    # present everything in time order
+    disagreements.sort(key=lambda x: x.get("start") if x.get("start") is not None else 0.0)
+    omissions.sort(key=lambda x: x.get("start") if x.get("start") is not None else 0.0)
     overlaps = [{"seg": i, "speaker": s["speaker"], "text": s["text"]}
                 for i, s in enumerate(base["segments"]) if s.get("interjection")]
     print("Summarizing…", flush=True)

@@ -32,9 +32,14 @@ Transcript part:
 
 Respond with ONLY this JSON: {{"topics": ["..."]}}"""
 
-REDUCE_PROMPT = """Below are topic bullets extracted from consecutive parts of ONE transcript.
-Merge duplicates and order them logically into a faithful, specific agenda-style list (max ~15 bullets).
-Do NOT invent topics that are not present in the bullets below. Keep the original language.
+REDUCE_PROMPT = """Below are granular topic bullets extracted from consecutive parts of ONE transcript (an interview, meeting, or talk). Many of them are narrow sub-points of the same broader theme.
+
+Consolidate them into a SHORT, high-level agenda — the handful of main topics someone would put on a meeting agenda or table of contents.
+Rules:
+- Group related sub-points under one broader heading; merge duplicates and near-duplicates. Prefer a few broad topics over many narrow ones.
+- Return AT MOST 8 topics. Aim for about 5-8; use fewer if the transcript is short. Never exceed 8.
+- Stay faithful: only consolidate what is in the bullets below. Do NOT invent, infer, or add topics that are not present.
+- Order the agenda logically (roughly the order discussed). Keep the original language.
 
 Topic bullets:
 {bullets}

@@ -69,14 +69,13 @@ def write_docx_report(base_docx, review, out_path):
     doc.add_heading("Suggested corrections", level=2)
     corr = review.get("disagreements", [])
     if corr:
-        t = _grid(doc, ["Time", "Speaker", "In transcript", "Suggested (from audio)", "Conf."])
+        t = _grid(doc, ["Time", "Speaker", "In transcript", "Suggested (from audio)"])
         for d in corr:
             c = t.add_row().cells
             c[0].text = _mmss(d.get("start"))
             c[1].text = str(d.get("speaker") or "")
             c[2].text = d.get("base_text", "")
             c[3].text = (d.get("llm", {}).get("correction") or d.get("audio_text", ""))
-            c[4].text = str(d.get("llm", {}).get("confidence", ""))
     else:
         doc.add_paragraph("None found.")
 
