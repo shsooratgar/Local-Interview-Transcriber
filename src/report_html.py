@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Standalone, offline HTML review cockpit.
 
-- Audio player on top; every suggested correction / omission has a small ▶ play
-  button and a clickable time that seek the audio to ~5s before that moment.
-- keep / drop triage, plus a "your correction" box per row for when both the
-  transcript and the audio suggestion are wrong (typing auto-keeps the row).
-- A running tally, and "Copy accepted" exports your edit (or the suggestion).
+- Audio player on top; every suggested correction / omission has a ▶ play button
+  and a clickable time that seek the audio to ~5s before that moment.
+- Both transcript columns show a few words of context with the differing span bold.
+- keep / drop triage, an editable "your correction" box per row, a running tally,
+  and "Copy accepted" to export the ones you kept.
+- Your choices are saved in the browser (localStorage), so refresh/reopen keeps them.
 
 For reliable local playback the audio is transcoded to a small mono .mp3 placed
-NEXT TO the html (same folder, bare filename) — browsers refuse cross-folder
-file:// media and many won't decode .m4a/AAC. Falls back to a relative path if
+NEXT TO the html (same folder, bare filename). Falls back to a relative path if
 ffmpeg isn't available.
 """
 from __future__ import annotations
@@ -51,18 +51,19 @@ TEMPLATE = """<!doctype html>
  .note{color:#555;font-size:13px;background:#fff;border:1px solid #eee;border-radius:8px;padding:10px 12px}
  .bar{background:#fff;border:1px solid #e3e3e3;border-radius:8px;padding:8px 12px;margin:10px 0;display:flex;align-items:center;gap:12px}
  .bar button{font-size:13px;padding:4px 12px;border:1px solid #0066cc;background:#0066cc;color:#fff;border-radius:6px;cursor:pointer}
+ .bar button.alt{background:#fff;color:#0066cc}
 </style></head><body>
 <header>
  <b>__TITLE__</b> __PILLS__
  <audio id="p" controls preload="metadata" src="__AUDIO__"></audio>
 </header>
 <main>
- <p class="note">Hit ▶ (or click the blue time) to hear that moment — playback starts ~5s earlier for context. Mark each row <b>keep</b> or <b>drop</b>; if both the transcript and the suggestion are wrong, type your own in <b>your correction</b> (that auto-keeps the row). "Copy accepted" exports everything you kept. Nothing here changes your transcript.</p>
+ <p class="note">Hit ▶ (or click the blue time) to hear that moment — playback starts ~5s earlier for context. Mark each row <b>keep</b> or <b>drop</b>; if both the transcript and the suggestion are wrong, type your own in <b>your correction</b> (auto-keeps the row). Your choices are saved in this browser, so refreshing keeps them. "Copy accepted" exports what you kept. Nothing here changes your transcript file.</p>
  <h2>Summary</h2>
  <p>__SUMMARY__</p>
  <ul>__TOPICS__</ul>
  <h2>Suggested corrections</h2>
- <div class="bar"><span id="tally">…</span><button onclick="copyAccepted()">Copy accepted</button></div>
+ <div class="bar"><span id="tally">…</span><button onclick="copyAccepted()">Copy accepted</button><button class="alt" onclick="resetState()">Reset choices</button></div>
  <table><tr><th class="t">time</th><th>speaker</th><th>in transcript</th><th>suggested (from audio)</th><th>conf</th><th>your correction</th><th></th></tr>__CORR__</table>
  <h2>Possible omissions <small>(heard in audio, missing from transcript)</small></h2>
  <table><tr><th class="t">time</th><th>heard in audio</th><th>your correction</th><th></th></tr>__OM__</table>
@@ -72,12 +73,17 @@ TEMPLATE = """<!doctype html>
 <script>
  var p=document.getElementById('p');
  var LEAD=5;
+ var SKEY="review:"+document.title;
+ function rows(){ return document.querySelectorAll('tr[data-flag]'); }
  function seek(s){ if(s===null||s===undefined) return; p.currentTime=Math.max(0,s-LEAD); p.play(); }
- function mark(btn,val){ var tr=btn.closest('tr'); var nv=tr.getAttribute('data-state')===val?'':val; tr.setAttribute('data-state',nv); tr.querySelectorAll('.dec button').forEach(function(b){ b.classList.toggle('on', b===btn && nv!==''); }); updateTally(); }
- function onedit(inp){ var tr=inp.closest('tr'); if(inp.value.trim()){ tr.setAttribute('data-state','keep'); tr.querySelectorAll('.dec button').forEach(function(b){ b.classList.toggle('on', b.textContent==='keep'); }); updateTally(); } }
- function updateTally(){ var rows=document.querySelectorAll('tr[data-flag]'); var k=0,d=0; rows.forEach(function(r){var s=r.getAttribute('data-state'); if(s==='keep')k++; else if(s==='drop')d++;}); document.getElementById('tally').textContent='kept '+k+' · dropped '+d+' · '+(rows.length-k-d)+' to review'; }
- function copyAccepted(){ var out=[]; document.querySelectorAll('tr[data-flag]').forEach(function(r){ if(r.getAttribute('data-state')!=='keep') return; var inp=r.querySelector('input.edit'); var custom=inp&&inp.value.trim()?inp.value.trim():(r.getAttribute('data-sug')||''); out.push((r.getAttribute('data-base')||'')+'  ->  '+custom); }); if(!out.length){ alert('Nothing marked keep yet.'); return; } navigator.clipboard.writeText(out.join(String.fromCharCode(10))).then(function(){ alert('Copied '+out.length+' accepted item(s) to clipboard.'); }); }
- updateTally();
+ function mark(btn,val){ var tr=btn.closest('tr'); var nv=tr.getAttribute('data-state')===val?'':val; tr.setAttribute('data-state',nv); tr.querySelectorAll('.dec button').forEach(function(b){ b.classList.toggle('on', b===btn && nv!==''); }); updateTally(); saveState(); }
+ function onedit(inp){ var tr=inp.closest('tr'); if(inp.value.trim()){ tr.setAttribute('data-state','keep'); tr.querySelectorAll('.dec button').forEach(function(b){ b.classList.toggle('on', b.textContent==='keep'); }); } updateTally(); saveState(); }
+ function updateTally(){ var k=0,d=0,rs=rows(); rs.forEach(function(r){var s=r.getAttribute('data-state'); if(s==='keep')k++; else if(s==='drop')d++;}); document.getElementById('tally').textContent='kept '+k+' · dropped '+d+' · '+(rs.length-k-d)+' to review'; }
+ function saveState(){ try{ var m={}; rows().forEach(function(r){ var st=r.getAttribute('data-state')||''; var inp=r.querySelector('input.edit'); var ed=inp?inp.value:''; if(st||ed) m[r.getAttribute('data-key')]={s:st,e:ed}; }); localStorage.setItem(SKEY,JSON.stringify(m)); }catch(e){} }
+ function loadState(){ try{ var m=JSON.parse(localStorage.getItem(SKEY)||'{}'); rows().forEach(function(r){ var v=m[r.getAttribute('data-key')]; if(!v) return; if(v.s){ r.setAttribute('data-state',v.s); r.querySelectorAll('.dec button').forEach(function(b){ b.classList.toggle('on', b.textContent===v.s); }); } var inp=r.querySelector('input.edit'); if(inp&&v.e) inp.value=v.e; }); }catch(e){} }
+ function resetState(){ if(!confirm('Clear all your keep/drop/edits for this file?')) return; try{ localStorage.removeItem(SKEY); }catch(e){} location.reload(); }
+ function copyAccepted(){ var out=[]; rows().forEach(function(r){ if(r.getAttribute('data-state')!=='keep') return; var inp=r.querySelector('input.edit'); var custom=inp&&inp.value.trim()?inp.value.trim():(r.getAttribute('data-sug')||''); out.push((r.getAttribute('data-base')||'')+'  ->  '+custom); }); if(!out.length){ alert('Nothing marked keep yet.'); return; } navigator.clipboard.writeText(out.join(String.fromCharCode(10))).then(function(){ alert('Copied '+out.length+' accepted item(s) to clipboard.'); }); }
+ loadState(); updateTally();
 </script>
 </body></html>"""
 
@@ -147,13 +153,13 @@ def write_html_report(audio_path, review, out_path):
     summ = review.get("summary", {}) or {}
 
     corr = ""
-    for d in review.get("disagreements", []):
+    for i, d in enumerate(review.get("disagreements", [])):
         base = _esc(d.get("base_text"))
         sug = _esc((d.get("llm") or {}).get("correction") or d.get("audio_text"))
         in_tr = _ctx_html(d.get("base_ctx"), d.get("base_text"))
         audio = _ctx_html(d.get("audio_ctx"),
                           (d.get("llm") or {}).get("correction") or d.get("audio_text"), cls="sug")
-        corr += (f'<tr data-flag data-base="{base}" data-sug="{sug}">'
+        corr += (f'<tr data-flag data-key="c{i}" data-base="{base}" data-sug="{sug}">'
                  f'{_time_cell(d.get("start"))}'
                  f'<td>{_esc(d.get("speaker"))}</td><td>{in_tr}</td>'
                  f'<td>{audio}</td>'
@@ -162,10 +168,10 @@ def write_html_report(audio_path, review, out_path):
     corr = corr or '<tr><td colspan="7">None found.</td></tr>'
 
     om = ""
-    for o in review.get("omissions", []):
+    for i, o in enumerate(review.get("omissions", [])):
         txt = _esc(o.get("audio_text"))
         heard = _ctx_html(o.get("audio_ctx"), o.get("audio_text"))
-        om += (f'<tr data-flag data-base="[omission]" data-sug="{txt}">'
+        om += (f'<tr data-flag data-key="o{i}" data-base="[omission]" data-sug="{txt}">'
                f'{_time_cell(o.get("start"))}'
                f'<td>{heard}</td>{_edit_cell()}{_dec()}</tr>')
     om = om or '<tr><td colspan="4">None found.</td></tr>'
