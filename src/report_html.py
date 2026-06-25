@@ -50,8 +50,6 @@ TEMPLATE = """<!doctype html>
  .dec button{font-size:12px;padding:3px 9px;margin-right:4px;border:1px solid #ccc;background:#fff;border-radius:6px;cursor:pointer}
  .dec button.on{border-color:#0066cc;background:#eaf3ff;font-weight:600}
  tr[data-state=keep]{background:#eafaf0}
- tr[data-state=drop]{background:#fbeaea}
- tr[data-mode=txt]{background:#eef6ff}
  tr[data-state=keep] .bt,tr[data-mode=txt] .bt{text-decoration:line-through;opacity:.5}
  tr[data-state=drop] .at{text-decoration:line-through;opacity:.5}
  tr[data-mode=txt] .dec{opacity:.4}

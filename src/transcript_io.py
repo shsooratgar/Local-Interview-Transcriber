@@ -24,7 +24,12 @@ SPEAKER_RE = re.compile(r"^\s*([^:]{1,40}?):\s*(.*)$", re.S)
 # inline interjection //Speaker: text //
 INTERJECTION_RE = re.compile(r"//\s*([^:/]{1,40}?):\s*(.*?)\s*//", re.S)
 # pause markers: (.) (..) (...) or timed (2.0)
-_PAUSE_RE = re.compile(r"\(\s*\.+\s*\)|\(\s*\d+(?:[.,]\d+)?\s*\)")
+_PAUSE_RE = re.compile(
+    r"\(\s*\.+\s*\)"                                                    # (.) (..) (...)
+    r"|\(\s*\d+(?:[.,]\d+)?\s*\)"                                       # (2.0) timed
+    r"|\([^)]*[Pp]ause[^)]*\)"                                          # (14 Sekunden Pause) etc.
+    r"|\b\d+\s+(?:seconds?|minutes?|Sekunden?|Minuten?)\s+[Pp]ause\b"  # bare written-out
+)
 
 
 def strip_pauses(text: str) -> str:
