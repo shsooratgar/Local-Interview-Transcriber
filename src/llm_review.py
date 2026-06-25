@@ -94,20 +94,23 @@ Decide whether to correct the transcript here:
 - If the ONLY difference is a spelling/orthography variant of the SAME word (British vs American English — e.g. favour/favor, colour/color, sulphate/sulfate, organise/organize, centre/center), set is_error=false. We do NOT care about spelling variants.
 - If it is a DIFFERENT word or changes the meaning (e.g. collar vs color, wipe vs white), set is_error=true.
 - If the transcript is fine, set is_error=false.
+- Known-correct domain terms/abbreviations (keep their spelling and UPPERCASE; never replace one of these with a lowercase or garbled form): {glossary}
 Do NOT invent anything beyond these two candidates. Keep the original language.
 
 Respond with ONLY this JSON:
 {{"is_error": true or false, "correction": "the corrected text (empty if fine)", "reason": "short reason", "confidence": 0.0 to 1.0}}"""
 
 
-def review_disagreement(base_text, audio_text, context_text, model, ollama_url):
+def review_disagreement(base_text, audio_text, context_text, model, ollama_url, glossary_terms=None):
     """Adjudicate a base-vs-audio disagreement. Grounded: the LLM chooses between
     the two real candidates instead of generating freely."""
     if base_text and base_text in context_text:
         marked = context_text.replace(base_text, f">>> {base_text} <<<", 1)
     else:
         marked = f"{context_text}\n\n[Marked]: >>> {base_text} <<<"
-    prompt = DISAGREE_PROMPT.format(base_text=base_text, audio_text=audio_text, context_marked=marked)
+    glossary = ", ".join((glossary_terms or [])[:60]) or "(none provided)"
+    prompt = DISAGREE_PROMPT.format(base_text=base_text, audio_text=audio_text,
+                                    context_marked=marked, glossary=glossary)
     r = requests.post(
         f"{ollama_url}/api/generate",
         json={"model": model, "prompt": prompt, "stream": False,

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import time
 from collections import Counter
 from pathlib import Path
@@ -95,12 +96,28 @@ def _context_for(segments, seg_idx, window=2):
     return " ".join(s["text"] for s in segments[lo:hi])
 
 
+def _is_subseq(s, t):
+    it = iter(t)
+    return all(c in it for c in s)
+
+
+def _acronym_downgrade(base, audio):
+    """Drop a flag that would downgrade a correct uppercase acronym to a lowercase
+    or garbled form of the same thing (e.g. CAGR -> cgr)."""
+    b = base.strip()
+    a = audio.strip().lower().replace(" ", "")
+    if re.fullmatch(r"[A-Z][A-Z&]+", b) and not re.search(r"[A-Z]{2}", audio):
+        return _is_subseq(a, b.lower()) or _is_subseq(b.lower(), a)
+    return False
+
+
 def review_with_base(audio, base_path, cfg, do_summary=True):
     print("Re-transcribing (or loading cache)…", flush=True)
     transcript, _ = cached_transcribe(audio, cfg)
     base = load_base(base_path)
     print("Aligning transcript with audio…", flush=True)
     al = align(base["segments"], words_from_whisper(transcript))
+    terms = load_glossary(cfg["glossary_file"])
 
     min_conf = cfg.get("disagreement_min_confidence", 0.6)
     cap = cfg.get("max_corrections_per_file", 40)
@@ -108,6 +125,7 @@ def review_with_base(audio, base_path, cfg, do_summary=True):
                   if f["type"] == "disagreement"
                   and not _trivial_disagreement(f["base_text"], f["audio_text"])
                   and not _degenerate(_audio_region(f))
+                  and not _acronym_downgrade(f["base_text"], f["audio_text"])
                   and (f.get("our_conf") or 0) >= min_conf]
     candidates.sort(key=lambda f: f.get("our_conf") or 0, reverse=True)
     n_disagree = sum(1 for f in al["flags"] if f["type"] == "disagreement")
@@ -119,7 +137,7 @@ def review_with_base(audio, base_path, cfg, do_summary=True):
     for f in tqdm(candidates, desc="LLM review", unit="flag"):
         ctx = _context_for(base["segments"], f.get("seg"))
         v = review_disagreement(f["base_text"], f["audio_text"], ctx,
-                                cfg["llm_model"], cfg["ollama_url"])
+                                cfg["llm_model"], cfg["ollama_url"], terms)
         if v.get("is_error"):
             spk = base["segments"][f["seg"]]["speaker"] if f.get("seg") is not None else None
             disagreements.append({**f, "speaker": spk, "llm": v})
@@ -132,7 +150,9 @@ def review_with_base(audio, base_path, cfg, do_summary=True):
                 for i, s in enumerate(base["segments"]) if s.get("interjection")]
 
     rec_flags = [f for f in al["flags"] if f["type"] == "recovered"
-                 and not _degenerate(_audio_region(f)) and (f.get("our_conf") or 0) >= min_conf]
+                 and not _degenerate(_audio_region(f))
+                 and not _acronym_downgrade(f["base_text"], f["audio_text"])
+                 and (f.get("our_conf") or 0) >= min_conf]
     rec_flags.sort(key=lambda f: f.get("our_conf") or 0, reverse=True)
     if rec_flags:
         print(f"{len(rec_flags)} recovered (dropped) passages; checking…", flush=True)

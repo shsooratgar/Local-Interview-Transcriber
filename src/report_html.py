@@ -49,7 +49,9 @@ TEMPLATE = """<!doctype html>
  .dec button{font-size:12px;padding:3px 9px;margin-right:4px;border:1px solid #ccc;background:#fff;border-radius:6px;cursor:pointer}
  .dec button.on{border-color:#0066cc;background:#eaf3ff;font-weight:600}
  tr[data-state=keep]{background:#eafaf0}
- tr[data-state=drop]{opacity:.45;text-decoration:line-through}
+ tr[data-state=drop]{background:#fbeaea}
+ tr[data-state=keep] .bt{text-decoration:line-through;opacity:.5}
+ tr[data-state=drop] .at{text-decoration:line-through;opacity:.5}
  .pill{display:inline-block;background:#eef2ff;color:#334;border-radius:11px;padding:2px 10px;margin-left:6px;font-size:12px}
  .note{color:#555;font-size:13px;background:#fff;border:1px solid #eee;border-radius:8px;padding:10px 12px}
  .bar{background:#fff;border:1px solid #e3e3e3;border-radius:8px;padding:8px 12px;margin:10px 0;display:flex;align-items:center;gap:12px}
@@ -139,8 +141,8 @@ def _suggest_row(key, d, badge=""):
     conf = _esc(d.get("our_conf"))
     return (f'<tr data-flag data-key="{key}" data-base="{base}" data-sug="{sug}">'
             f'{_time_cell(d.get("start"))}'
-            f'<td>{_esc(d.get("speaker"))}</td><td>{in_tr}</td>'
-            f'<td>{audio}{badge}</td><td class="cf">{conf}</td>'
+            f'<td>{_esc(d.get("speaker"))}</td><td class="bt">{in_tr}</td>'
+            f'<td class="at">{audio}{badge}</td><td class="cf">{conf}</td>'
             f'{_edit_cell()}{_dec()}</tr>')
 
 
@@ -183,7 +185,7 @@ def write_html_report(audio_path, review, out_path):
     for i, o in enumerate(review.get("omissions", [])):
         heard = _ctx_html(o.get("audio_ctx"), o.get("audio_text"))
         om += (f'<tr data-flag data-key="o{i}" data-base="[omission]" data-sug="{_esc(o.get("audio_text"))}">'
-               f'{_time_cell(o.get("start"))}<td>{heard}</td>{_edit_cell()}{_dec()}</tr>')
+               f'{_time_cell(o.get("start"))}<td class="at">{heard}</td>{_edit_cell()}{_dec()}</tr>')
     om = om or '<tr><td colspan="4">None found.</td></tr>'
 
     ov = "".join(f'<li><b>{_esc(o.get("speaker"))}:</b> {_esc(o.get("text"))}</li>'
