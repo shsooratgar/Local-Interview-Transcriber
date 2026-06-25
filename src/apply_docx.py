@@ -21,9 +21,18 @@ from docx import Document
 from transcript_io import _parse_turn
 
 
+def _accepted(dec):
+    """A row is applied if you typed an override (mode 'txt') or clicked keep."""
+    return bool((dec.get("m") == "txt" and (dec.get("e") or "").strip()) or dec.get("s") == "keep")
+
+
 def _final_text(flag, dec):
-    edit = (dec.get("e") or "").strip()
-    return edit or (flag.get("llm") or {}).get("correction") or flag.get("audio_text") or ""
+    # your typed override wins only when it's the active choice (mode 'txt')
+    if dec.get("m") == "txt":
+        e = (dec.get("e") or "").strip()
+        if e:
+            return e
+    return (flag.get("llm") or {}).get("correction") or flag.get("audio_text") or ""
 
 
 def _rewrite(p, new_full):
@@ -95,19 +104,21 @@ def apply_decisions(base_docx, review, decisions, out_path):
 
     for i, d in enumerate(review.get("disagreements", [])):
         dec = decisions.get(f"c{i}")
-        if dec and dec.get("s") == "keep":
+        if dec and _accepted(dec):
             do_replace(d, dec)
 
     for i, d in enumerate(review.get("recovered", [])):
         dec = decisions.get(f"r{i}")
-        if dec and dec.get("s") == "keep":
+        if dec and _accepted(dec):
             do_replace(d, dec)
 
     for i, o in enumerate(review.get("omissions", [])):
         dec = decisions.get(f"o{i}")
-        if not dec or dec.get("s") != "keep":
+        if not dec or not _accepted(dec):
             continue
-        text = (dec.get("e") or "").strip() or o.get("audio_text", "")
+        text = o.get("audio_text", "")
+        if dec.get("m") == "txt" and (dec.get("e") or "").strip():
+            text = dec["e"].strip()
         seg = o.get("seg")
         if text and seg is not None and seg < len(s2p):
             p = s2p[seg]

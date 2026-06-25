@@ -5,9 +5,10 @@
   has a ▶ play button and a clickable time that seek to ~5s before that moment.
 - Both transcript columns show a few words of context with the differing span bold.
 - "conf" = how sure OUR re-transcription was about the audio span (testing aid).
-- keep / drop triage, an editable "your correction" box per row, a running tally,
-  "Copy accepted", and "Apply" (writes a corrected .docx via the local server).
-- Choices are saved in the browser (localStorage), so refresh/reopen keeps them.
+- Per row you either click keep/drop OR type your own correction — whichever you
+  touch last wins; the other greys out (still clickable to switch).
+- A running tally, "Copy accepted", and "Apply" (writes a corrected .docx via the
+  local server). Choices are saved in the browser (localStorage).
 
 For reliable local playback the audio is transcoded to a small mono .mp3 placed
 NEXT TO the html (same folder, bare filename); falls back to a relative path if
@@ -50,8 +51,11 @@ TEMPLATE = """<!doctype html>
  .dec button.on{border-color:#0066cc;background:#eaf3ff;font-weight:600}
  tr[data-state=keep]{background:#eafaf0}
  tr[data-state=drop]{background:#fbeaea}
- tr[data-state=keep] .bt{text-decoration:line-through;opacity:.5}
+ tr[data-mode=txt]{background:#eef6ff}
+ tr[data-state=keep] .bt,tr[data-mode=txt] .bt{text-decoration:line-through;opacity:.5}
  tr[data-state=drop] .at{text-decoration:line-through;opacity:.5}
+ tr[data-mode=txt] .dec{opacity:.4}
+ tr[data-mode=btn] .edit{opacity:.4}
  .pill{display:inline-block;background:#eef2ff;color:#334;border-radius:11px;padding:2px 10px;margin-left:6px;font-size:12px}
  .note{color:#555;font-size:13px;background:#fff;border:1px solid #eee;border-radius:8px;padding:10px 12px}
  .bar{background:#fff;border:1px solid #e3e3e3;border-radius:8px;padding:8px 12px;margin:10px 0;display:flex;align-items:center;gap:12px}
@@ -63,7 +67,7 @@ TEMPLATE = """<!doctype html>
  <audio id="p" controls preload="metadata" src="__AUDIO__"></audio>
 </header>
 <main>
- <p class="note">Hit ▶ (or click the blue time) to hear that moment — playback starts ~5s earlier for context. Mark each row <b>keep</b> or <b>drop</b>; if both the transcript and the suggestion are wrong, type your own in <b>your correction</b> (auto-keeps the row). "conf" is how sure our re-transcription was. Your choices are saved in this browser. "Apply" writes a corrected .docx; nothing else changes your transcript file.</p>
+ <p class="note">Hit ▶ (or click the blue time) to hear that moment — playback starts ~5s earlier. For each row, click <b>keep</b>/<b>drop</b> OR type your own in <b>your correction</b> — whichever you touch last wins; the other greys out (still clickable to switch). "conf" is how sure our re-transcription was. Choices are saved in this browser. "Apply" writes a corrected .docx; nothing else changes your transcript file.</p>
  <h2>Summary</h2>
  <p>__SUMMARY__</p>
  <ul>__TOPICS__</ul>
@@ -83,14 +87,15 @@ TEMPLATE = """<!doctype html>
  var SKEY="review:"+document.title;
  function rows(){ return document.querySelectorAll('tr[data-flag]'); }
  function seek(s){ if(s===null||s===undefined) return; p.currentTime=Math.max(0,s-LEAD); p.play(); }
- function mark(btn,val){ var tr=btn.closest('tr'); var nv=tr.getAttribute('data-state')===val?'':val; tr.setAttribute('data-state',nv); tr.querySelectorAll('.dec button').forEach(function(b){ b.classList.toggle('on', b===btn && nv!==''); }); updateTally(); saveState(); }
- function onedit(inp){ var tr=inp.closest('tr'); if(inp.value.trim()){ tr.setAttribute('data-state','keep'); tr.querySelectorAll('.dec button').forEach(function(b){ b.classList.toggle('on', b.textContent==='keep'); }); } updateTally(); saveState(); }
- function updateTally(){ var k=0,d=0,rs=rows(); rs.forEach(function(r){var s=r.getAttribute('data-state'); if(s==='keep')k++; else if(s==='drop')d++;}); document.getElementById('tally').textContent='kept '+k+' · dropped '+d+' · '+(rs.length-k-d)+' to review'; }
- function saveState(){ try{ var m={}; rows().forEach(function(r){ var st=r.getAttribute('data-state')||''; var inp=r.querySelector('input.edit'); var ed=inp?inp.value:''; if(st||ed) m[r.getAttribute('data-key')]={s:st,e:ed}; }); localStorage.setItem(SKEY,JSON.stringify(m)); }catch(e){} }
- function loadState(){ try{ var m=JSON.parse(localStorage.getItem(SKEY)||'{}'); rows().forEach(function(r){ var v=m[r.getAttribute('data-key')]; if(!v) return; if(v.s){ r.setAttribute('data-state',v.s); r.querySelectorAll('.dec button').forEach(function(b){ b.classList.toggle('on', b.textContent===v.s); }); } var inp=r.querySelector('input.edit'); if(inp&&v.e) inp.value=v.e; }); }catch(e){} }
+ function mark(btn,val){ var tr=btn.closest('tr'); var nv=tr.getAttribute('data-state')===val?'':val; tr.setAttribute('data-state',nv); var inp=tr.querySelector('input.edit'); tr.setAttribute('data-mode', nv?'btn':((inp&&inp.value.trim())?'txt':'')); tr.querySelectorAll('.dec button').forEach(function(b){ b.classList.toggle('on', b===btn && nv!==''); }); updateTally(); saveState(); }
+ function onedit(inp){ var tr=inp.closest('tr'); tr.setAttribute('data-mode', inp.value.trim()?'txt':(tr.getAttribute('data-state')?'btn':'')); updateTally(); saveState(); }
+ function accepted(r){ var mo=r.getAttribute('data-mode'); return mo==='txt' || (mo!=='txt' && r.getAttribute('data-state')==='keep'); }
+ function updateTally(){ var k=0,d=0,rs=rows(); rs.forEach(function(r){ var mo=r.getAttribute('data-mode'),s=r.getAttribute('data-state'); if(mo==='txt')k++; else if(s==='keep')k++; else if(s==='drop')d++; }); document.getElementById('tally').textContent='kept '+k+' · dropped '+d+' · '+(rs.length-k-d)+' to review'; }
+ function saveState(){ try{ var m={}; rows().forEach(function(r){ var st=r.getAttribute('data-state')||''; var mo=r.getAttribute('data-mode')||''; var inp=r.querySelector('input.edit'); var ed=inp?inp.value:''; if(st||ed||mo) m[r.getAttribute('data-key')]={s:st,e:ed,m:mo}; }); localStorage.setItem(SKEY,JSON.stringify(m)); }catch(e){} }
+ function loadState(){ try{ var m=JSON.parse(localStorage.getItem(SKEY)||'{}'); rows().forEach(function(r){ var v=m[r.getAttribute('data-key')]; if(!v) return; if(v.s) r.setAttribute('data-state',v.s); if(v.m) r.setAttribute('data-mode',v.m); var inp=r.querySelector('input.edit'); if(inp&&v.e) inp.value=v.e; r.querySelectorAll('.dec button').forEach(function(b){ b.classList.toggle('on', b.textContent===v.s && v.m==='btn'); }); }); }catch(e){} }
  function resetState(){ if(!confirm('Clear all your keep/drop/edits for this file?')) return; try{ localStorage.removeItem(SKEY); }catch(e){} location.reload(); }
- function copyAccepted(){ var out=[]; rows().forEach(function(r){ if(r.getAttribute('data-state')!=='keep') return; var inp=r.querySelector('input.edit'); var custom=inp&&inp.value.trim()?inp.value.trim():(r.getAttribute('data-sug')||''); out.push((r.getAttribute('data-base')||'')+'  ->  '+custom); }); if(!out.length){ alert('Nothing marked keep yet.'); return; } navigator.clipboard.writeText(out.join(String.fromCharCode(10))).then(function(){ alert('Copied '+out.length+' accepted item(s) to clipboard.'); }); }
- function applyChanges(){ var dec={}; rows().forEach(function(r){ var st=r.getAttribute('data-state')||''; var inp=r.querySelector('input.edit'); var e=inp?inp.value:''; if(st||e) dec[r.getAttribute('data-key')]={s:st,e:e}; }); fetch('/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decisions:dec})}).then(function(r){return r.json();}).then(function(j){ if(j.error){alert('Apply failed: '+j.error);return;} alert('Created '+(j.out||'').split('/').pop()+'  ('+j.applied+' applied'+(j.skipped?', '+j.skipped+' need manual placement':'')+').'); }).catch(function(){ alert('Apply needs the local server — start it with serve_review.py (or the launcher).'); }); }
+ function copyAccepted(){ var out=[]; rows().forEach(function(r){ var mo=r.getAttribute('data-mode'),s=r.getAttribute('data-state'),inp=r.querySelector('input.edit'); var t=null; if(mo==='txt'&&inp&&inp.value.trim()) t=inp.value.trim(); else if(mo!=='txt'&&s==='keep') t=r.getAttribute('data-sug')||''; if(t===null) return; out.push((r.getAttribute('data-base')||'')+'  ->  '+t); }); if(!out.length){ alert('Nothing accepted yet.'); return; } navigator.clipboard.writeText(out.join(String.fromCharCode(10))).then(function(){ alert('Copied '+out.length+' accepted item(s).'); }); }
+ function applyChanges(){ var dec={}; rows().forEach(function(r){ var st=r.getAttribute('data-state')||''; var mo=r.getAttribute('data-mode')||''; var inp=r.querySelector('input.edit'); var e=inp?inp.value:''; if(st||e||mo) dec[r.getAttribute('data-key')]={s:st,e:e,m:mo}; }); fetch('/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decisions:dec})}).then(function(r){return r.json();}).then(function(j){ if(j.error){alert('Apply failed: '+j.error);return;} alert('Created '+(j.out||'').split('/').pop()+'  ('+j.applied+' applied'+(j.skipped?', '+j.skipped+' need manual placement':'')+').'); }).catch(function(){ alert('Apply needs the local server — start it with serve_review.py (or the launcher).'); }); }
  loadState(); updateTally();
 </script>
 </body></html>"""
