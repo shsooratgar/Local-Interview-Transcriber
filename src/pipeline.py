@@ -111,6 +111,29 @@ def _acronym_downgrade(base, audio):
     return False
 
 
+_FILLER_WORDS = {"um", "uh", "er", "erm", "ah", "eh", "mm", "hmm", "mhm", "uhm"}
+
+
+def _norm_words(text):
+    ws = [re.sub(r"\W", "", w).lower() for w in text.split()]
+    ws = [w for w in ws if w and w not in _FILLER_WORDS]
+    out = []
+    for w in ws:
+        if not out or out[-1] != w:  # collapse immediate repeats ("what what" -> "what")
+            out.append(w)
+    return out
+
+
+def _disfluency_only(base_text, audio_text):
+    """base and audio differ only by filler words / repeated words -> not a real fix."""
+    return _norm_words(base_text) == _norm_words(audio_text)
+
+
+def _noop(base_text, correction):
+    """the suggested correction is the same as the transcript (no real change)."""
+    return _norm_words(base_text) == _norm_words(correction)
+
+
 def review_with_base(audio, base_path, cfg, do_summary=True):
     print("Re-transcribing (or loading cache)…", flush=True)
     transcript, _ = cached_transcribe(audio, cfg)
@@ -126,6 +149,7 @@ def review_with_base(audio, base_path, cfg, do_summary=True):
                   and not _trivial_disagreement(f["base_text"], f["audio_text"])
                   and not _degenerate(_audio_region(f))
                   and not _acronym_downgrade(f["base_text"], f["audio_text"])
+                  and not _disfluency_only(f["base_text"], f["audio_text"])
                   and (f.get("our_conf") or 0) >= min_conf]
     candidates.sort(key=lambda f: f.get("our_conf") or 0, reverse=True)
     n_disagree = sum(1 for f in al["flags"] if f["type"] == "disagreement")
@@ -138,7 +162,7 @@ def review_with_base(audio, base_path, cfg, do_summary=True):
         ctx = _context_for(base["segments"], f.get("seg"))
         v = review_disagreement(f["base_text"], f["audio_text"], ctx,
                                 cfg["llm_model"], cfg["ollama_url"], terms)
-        if v.get("is_error"):
+        if v.get("is_error") and not _noop(f["base_text"], v.get("correction") or ""):
             spk = base["segments"][f["seg"]]["speaker"] if f.get("seg") is not None else None
             disagreements.append({**f, "speaker": spk, "llm": v})
 
