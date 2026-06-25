@@ -1,44 +1,39 @@
 # Local Interview Transcriber & Checker
 
-Find and fix likely mis-transcriptions in interview transcripts — **fully local, free, and offline**, so confidential audio never leaves your machine.
-
-Built for ~50 English/German interviews originally transcribed with [noScribe](https://github.com/kaixxx/noScribe).
+Find & fix likely mis-transcriptions, omissions, and speaker/overlap issues in interview transcripts — **fully local, free, and offline**, so confidential audio never leaves your machine. Built to QA ~50 English/German interviews originally transcribed with [noScribe](https://github.com/kaixxx/noScribe).
 
 ## ⚠️ Confidential data
-Interview audio and transcripts are **never** committed to git. They live in `data/`, which is git-ignored. Keep this repository **private**. See [`data/README.md`](data/README.md).
+Audio + transcripts live in `data/`, results in `output/` — both git-ignored. Keep this repository **private**.
 
-## How it works
-1. **Re-transcribe** the audio locally with Whisper (MLX, GPU-accelerated on Apple Silicon) to get word-level timestamps + confidence.
-2. **Flag suspect spans** = low Whisper confidence (+ optional disagreement with the original noScribe transcript).
-3. **LLM review** (local, via Ollama) reads each flagged span in context and suggests a correction + reason.
-4. **Targeted re-listen** (optional) re-transcribes only the flagged audio slices more carefully.
-5. **Report** an annotated file with timestamps, original text, suggestion, and confidence — you accept/reject each change.
+## How it works (Option A)
+1. **Re-transcribe** the audio locally (Whisper via MLX) → word-level confidence.
+2. **Text-align** it against the noScribe `.docx` (no timestamps needed).
+3. **Flag**: *disagreements* (mis-hearings), *recovered* passages (dropped chunks, often another speaker), *omissions*, *overlaps* (`//…//`).
+4. A **local LLM** (Ollama, `qwen2.5:14b`) adjudicates — grounded, never invents — with pure-code gates removing noise (confidence, hallucinations, acronym downgrades, filler/no-op).
+5. **Summarize** into ≤8 agenda-style topics.
+6. **Review** in the HTML cockpit (click-to-play audio, keep/drop, your-own-correction) → **Apply** writes a corrected `.docx` (original untouched).
 
-A **glossary** of domain terms (`glossary/glossary.txt`) biases the transcriber and informs the LLM, fixing many technical-word errors up front.
-
-## Requirements
-- macOS on Apple Silicon (developed on M5 / 32 GB)
-- [Homebrew](https://brew.sh): `ffmpeg`, `ollama`
-- [Miniconda](https://docs.conda.io)
-- A local LLM: `ollama pull qwen2.5:14b`
-
-## Setup
+## Setup (macOS, Apple Silicon)
 ```bash
-# system tools
-brew install ffmpeg ollama
-brew services start ollama
-ollama pull qwen2.5:14b
-
-# python environment
-conda create -y -n transcriber python=3.11
-conda activate transcriber
-pip install -r requirements.txt
-
-# verify everything is ready
-python src/check_setup.py
+brew install ffmpeg ollama && brew services start ollama && ollama pull qwen2.5:14b
+conda create -y -n transcriber python=3.11 && conda activate transcriber
+pip install -r requirements.txt          # to fetch public test data: pip install -r requirements-dev.txt
+python src/check_setup.py                # verify the toolchain
 ```
 
-## Status
-🚧 Work in progress — environment + scaffold in place; pipeline being built.
+## Use
+```bash
+conda activate transcriber
+# process one file  ->  output/<stem>.review.{docx,html,json}
+python src/pipeline.py "data/audio/file.m4a" --base "data/transcripts/file.docx"
+# review + apply (audio player + working Apply button):
+#   double-click review.command     (or:  python src/serve_review.py "file")
+```
+Add domain terms / abbreviations to `glossary/glossary.txt` to bias the transcription and the reviewer (re-run with `--force` to re-transcribe).
 
-A Windows setup guide for collaborators will be added later.
+## Layout
+`src/`: transcribe · transcript_io · align · llm_review · summarize · pipeline · report_docx · report_html · apply_docx · serve_review · flag · common.
+`review.command` — double-click launcher. `config.example.yaml` — tuning (confidence gate, per-file cap, models).
+
+## Status
+🚧 Working end-to-end on Mac. TBD: Windows setup for collaborators; optional standalone mode (drop noScribe via a second internal Whisper pass + pyannote diarization); Excel summary export.
