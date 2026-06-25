@@ -68,13 +68,21 @@ def _trivial_disagreement(base_text, audio_text):
     return False
 
 
+def _audio_region(f):
+    """The audio span plus its surrounding context — so we can catch a
+    hallucination sitting *around* a clean-looking span (e.g. Cyrillic nearby)."""
+    c = f.get("audio_ctx") or {}
+    return " ".join([c.get("before", ""), f.get("audio_text", ""), c.get("after", "")])
+
+
 def _degenerate(text):
-    """True if OUR transcription text looks like a hallucination (non-Latin
-    gibberish or a repetition loop) — those are our failures, not real errors."""
+    """True if OUR transcription looks like a hallucination: any non-Latin script
+    (interviews are English/German, so Cyrillic/Greek/CJK = made up) or a
+    repetition loop. These are our failures, not real errors."""
     toks = text.lower().split()
     if not toks:
         return True
-    if sum(1 for ch in text if ch.isalpha() and ord(ch) > 0x250) >= 3:
+    if any(ch.isalpha() and ord(ch) > 0x250 for ch in text):
         return True
     c = Counter(toks)
     return len(toks) >= 4 and c.most_common(1)[0][1] / len(toks) > 0.5
@@ -99,7 +107,7 @@ def review_with_base(audio, base_path, cfg, do_summary=True):
     candidates = [f for f in al["flags"]
                   if f["type"] == "disagreement"
                   and not _trivial_disagreement(f["base_text"], f["audio_text"])
-                  and not _degenerate(f["audio_text"])
+                  and not _degenerate(_audio_region(f))
                   and (f.get("our_conf") or 0) >= min_conf]
     candidates.sort(key=lambda f: f.get("our_conf") or 0, reverse=True)
     n_disagree = sum(1 for f in al["flags"] if f["type"] == "disagreement")
@@ -124,7 +132,7 @@ def review_with_base(audio, base_path, cfg, do_summary=True):
                 for i, s in enumerate(base["segments"]) if s.get("interjection")]
 
     rec_flags = [f for f in al["flags"] if f["type"] == "recovered"
-                 and not _degenerate(f["audio_text"]) and (f.get("our_conf") or 0) >= min_conf]
+                 and not _degenerate(_audio_region(f)) and (f.get("our_conf") or 0) >= min_conf]
     rec_flags.sort(key=lambda f: f.get("our_conf") or 0, reverse=True)
     if rec_flags:
         print(f"{len(rec_flags)} recovered (dropped) passages; checking…", flush=True)

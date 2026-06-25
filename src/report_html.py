@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """Standalone, offline HTML review cockpit.
 
-- Audio player on top; every suggested correction / omission has a ▶ play button
-  and a clickable time that seek the audio to ~5s before that moment.
+- Audio player on top; every suggested correction / recovered passage / omission
+  has a ▶ play button and a clickable time that seek to ~5s before that moment.
 - Both transcript columns show a few words of context with the differing span bold.
+- "conf" = how sure OUR re-transcription was about the audio span (testing aid).
 - keep / drop triage, an editable "your correction" box per row, a running tally,
-  and "Copy accepted" to export the ones you kept.
-- Your choices are saved in the browser (localStorage), so refresh/reopen keeps them.
+  "Copy accepted", and "Apply" (writes a corrected .docx via the local server).
+- Choices are saved in the browser (localStorage), so refresh/reopen keeps them.
 
 For reliable local playback the audio is transcoded to a small mono .mp3 placed
-NEXT TO the html (same folder, bare filename). Falls back to a relative path if
+NEXT TO the html (same folder, bare filename); falls back to a relative path if
 ffmpeg isn't available.
 """
 from __future__ import annotations
@@ -42,6 +43,7 @@ TEMPLATE = """<!doctype html>
  .ts:hover{text-decoration:underline}
  .sug{color:#137a3e}
  .spk{color:#9a3412;font-size:11px;font-weight:600;white-space:nowrap}
+ .cf{font-variant-numeric:tabular-nums;color:#666;width:46px}
  .edit{width:170px;font-size:13px;padding:4px 6px;border:1px solid #cdd6e4;border-radius:6px}
  .dec{white-space:nowrap;width:112px}
  .dec button{font-size:12px;padding:3px 9px;margin-right:4px;border:1px solid #ccc;background:#fff;border-radius:6px;cursor:pointer}
@@ -59,15 +61,15 @@ TEMPLATE = """<!doctype html>
  <audio id="p" controls preload="metadata" src="__AUDIO__"></audio>
 </header>
 <main>
- <p class="note">Hit ▶ (or click the blue time) to hear that moment — playback starts ~5s earlier for context. Mark each row <b>keep</b> or <b>drop</b>; if both the transcript and the suggestion are wrong, type your own in <b>your correction</b> (auto-keeps the row). Your choices are saved in this browser, so refreshing keeps them. "Copy accepted" exports what you kept. Nothing here changes your transcript file.</p>
+ <p class="note">Hit ▶ (or click the blue time) to hear that moment — playback starts ~5s earlier for context. Mark each row <b>keep</b> or <b>drop</b>; if both the transcript and the suggestion are wrong, type your own in <b>your correction</b> (auto-keeps the row). "conf" is how sure our re-transcription was. Your choices are saved in this browser. "Apply" writes a corrected .docx; nothing else changes your transcript file.</p>
  <h2>Summary</h2>
  <p>__SUMMARY__</p>
  <ul>__TOPICS__</ul>
  <h2>Suggested corrections</h2>
  <div class="bar"><span id="tally">…</span><button onclick="applyChanges()">Apply → corrected .docx</button><button class="alt" onclick="copyAccepted()">Copy accepted</button><button class="alt" onclick="resetState()">Reset choices</button></div>
- <table><tr><th class="t">time</th><th>speaker</th><th>in transcript</th><th>suggested (from audio)</th><th>your correction</th><th></th></tr>__CORR__</table>
+ <table><tr><th class="t">time</th><th>speaker</th><th>in transcript</th><th>suggested (from audio)</th><th class="cf">conf</th><th>your correction</th><th></th></tr>__CORR__</table>
  <h2>Recovered passages <small>(transcript dropped these — often another speaker)</small></h2>
- <table><tr><th class="t">time</th><th>speaker</th><th>in transcript</th><th>recovered (from audio)</th><th>your correction</th><th></th></tr>__REC__</table>
+ <table><tr><th class="t">time</th><th>speaker</th><th>in transcript</th><th>recovered (from audio)</th><th class="cf">conf</th><th>your correction</th><th></th></tr>__REC__</table>
  <h2>Possible omissions <small>(heard in audio, missing from transcript)</small></h2>
  <table><tr><th class="t">time</th><th>heard in audio</th><th>your correction</th><th></th></tr>__OM__</table>
  <h2>Overlapping speech to verify</h2>
@@ -104,8 +106,6 @@ def _esc(x):
 
 
 def _ctx_html(ctx, span_text, cls=""):
-    """Render '<context before> <b>span</b> <context after>'. Falls back to just
-    the bold span if no context is available (older reviews without *_ctx)."""
     if not ctx:
         return f'<b class="{cls}">{_esc(span_text)}</b>' if span_text else ""
     before, after = _esc(ctx.get("before")), _esc(ctx.get("after"))
@@ -130,10 +130,23 @@ def _dec():
             '<button onclick="mark(this,\'drop\')">drop</button></td>')
 
 
+def _suggest_row(key, d, badge=""):
+    base = _esc(d.get("base_text"))
+    sug = _esc((d.get("llm") or {}).get("correction") or d.get("audio_text"))
+    in_tr = _ctx_html(d.get("base_ctx"), d.get("base_text"))
+    audio = _ctx_html(d.get("audio_ctx"),
+                      (d.get("llm") or {}).get("correction") or d.get("audio_text"), cls="sug")
+    conf = _esc(d.get("our_conf"))
+    return (f'<tr data-flag data-key="{key}" data-base="{base}" data-sug="{sug}">'
+            f'{_time_cell(d.get("start"))}'
+            f'<td>{_esc(d.get("speaker"))}</td><td>{in_tr}</td>'
+            f'<td>{audio}{badge}</td><td class="cf">{conf}</td>'
+            f'{_edit_cell()}{_dec()}</tr>')
+
+
 def _web_audio_src(audio_path, out_dir):
-    """Return an <audio> src browsers reliably play from a local file: a mono
-    .mp3 placed next to the report (bare filename). Cached. Falls back to a
-    relative path to the original if ffmpeg is unavailable."""
+    """A mono .mp3 next to the report (bare filename) for reliable local playback;
+    falls back to a relative path if ffmpeg is unavailable."""
     audio_path = Path(audio_path)
     ffmpeg = shutil.which("ffmpeg")
     if ffmpeg:
@@ -156,42 +169,21 @@ def write_html_report(audio_path, review, out_path):
     audio_rel = _web_audio_src(audio_path, out_path.parent)
     summ = review.get("summary", {}) or {}
 
-    corr = ""
-    for i, d in enumerate(review.get("disagreements", [])):
-        base = _esc(d.get("base_text"))
-        sug = _esc((d.get("llm") or {}).get("correction") or d.get("audio_text"))
-        in_tr = _ctx_html(d.get("base_ctx"), d.get("base_text"))
-        audio = _ctx_html(d.get("audio_ctx"),
-                          (d.get("llm") or {}).get("correction") or d.get("audio_text"), cls="sug")
-        corr += (f'<tr data-flag data-key="c{i}" data-base="{base}" data-sug="{sug}">'
-                 f'{_time_cell(d.get("start"))}'
-                 f'<td>{_esc(d.get("speaker"))}</td><td>{in_tr}</td>'
-                 f'<td>{audio}</td>'
-                 f'{_edit_cell()}{_dec()}</tr>')
-    corr = corr or '<tr><td colspan="6">None found.</td></tr>'
+    corr = "".join(_suggest_row(f"c{i}", d)
+                   for i, d in enumerate(review.get("disagreements", []))) \
+        or '<tr><td colspan="7">None found.</td></tr>'
 
-    rec = ""
-    for i, d in enumerate(review.get("recovered", [])):
-        base = _esc(d.get("base_text"))
-        sug = _esc((d.get("llm") or {}).get("correction") or d.get("audio_text"))
-        in_tr = _ctx_html(d.get("base_ctx"), d.get("base_text"))
-        audio = _ctx_html(d.get("audio_ctx"),
-                          (d.get("llm") or {}).get("correction") or d.get("audio_text"), cls="sug")
-        badge = ' <span class="spk">(other speaker?)</span>' if d.get("other_speaker") else ""
-        rec += (f'<tr data-flag data-key="r{i}" data-base="{base}" data-sug="{sug}">'
-                f'{_time_cell(d.get("start"))}'
-                f'<td>{_esc(d.get("speaker"))}</td><td>{in_tr}</td>'
-                f'<td>{audio}{badge}</td>'
-                f'{_edit_cell()}{_dec()}</tr>')
-    rec = rec or '<tr><td colspan="6">None found.</td></tr>'
+    rec = "".join(
+        _suggest_row(f"r{i}", d,
+                     badge=' <span class="spk">(other speaker?)</span>' if d.get("other_speaker") else "")
+        for i, d in enumerate(review.get("recovered", []))) \
+        or '<tr><td colspan="7">None found.</td></tr>'
 
     om = ""
     for i, o in enumerate(review.get("omissions", [])):
-        txt = _esc(o.get("audio_text"))
         heard = _ctx_html(o.get("audio_ctx"), o.get("audio_text"))
-        om += (f'<tr data-flag data-key="o{i}" data-base="[omission]" data-sug="{txt}">'
-               f'{_time_cell(o.get("start"))}'
-               f'<td>{heard}</td>{_edit_cell()}{_dec()}</tr>')
+        om += (f'<tr data-flag data-key="o{i}" data-base="[omission]" data-sug="{_esc(o.get("audio_text"))}">'
+               f'{_time_cell(o.get("start"))}<td>{heard}</td>{_edit_cell()}{_dec()}</tr>')
     om = om or '<tr><td colspan="4">None found.</td></tr>'
 
     ov = "".join(f'<li><b>{_esc(o.get("speaker"))}:</b> {_esc(o.get("text"))}</li>'
@@ -199,6 +191,7 @@ def write_html_report(audio_path, review, out_path):
     topics = "".join(f"<li>{_esc(t)}</li>" for t in summ.get("topics", []))
     pills = (f'<span class="pill">match {_esc(review.get("match_coverage"))}</span>'
              f'<span class="pill">{len(review.get("disagreements", []))} corrections</span>'
+             f'<span class="pill">{len(review.get("recovered", []))} recovered</span>'
              f'<span class="pill">{len(review.get("omissions", []))} omissions</span>'
              f'<span class="pill">{len(review.get("overlaps", []))} overlaps</span>')
 
