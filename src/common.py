@@ -15,8 +15,14 @@ ROOT = Path(__file__).resolve().parent.parent
 DEFAULTS = {
     # models
     "llm_model": "qwen2.5:14b",
-    "whisper_model": "mlx-community/whisper-large-v3-turbo",          # fast first pass
-    "whisper_model_careful": "mlx-community/whisper-large-v3-mlx",    # re-listen to flags
+    "whisper_backend": "mlx",        # "mlx" (Apple Silicon) | "faster" (cross-platform / Windows)
+    "whisper_model": "mlx-community/whisper-large-v3-turbo",          # mlx backend: fast first pass
+    "whisper_model_careful": "mlx-community/whisper-large-v3-mlx",    # re-listen to flags ("" = skip)
+    "whisper_model_careful_faster": "large-v3",  # careful model on the faster backend
+    "careful_pad_seconds": 8,        # context (seconds) around each flag's re-listen clip
+    "whisper_model_faster": "large-v3",   # faster-whisper backend: model name (e.g. large-v3, medium)
+    "whisper_device": "auto",        # faster-whisper: "auto" | "cpu" | "cuda"
+    "whisper_compute_type": "int8",  # faster-whisper: "int8" (CPU-friendly) | "float16" (GPU)
     "whisper_language": "auto",      # "auto" | "en" | "de"
     "languages": ["en", "de"],       # for the LLM's context only
     # flagging
@@ -24,9 +30,14 @@ DEFAULTS = {
     "context_window_seconds": 20,
     "min_segment_gap_seconds": 0.5,
     "disagreement_min_confidence": 0.6,   # only surface a disagreement if OUR pass is this sure
+    "omission_min_confidence": 0.3,       # lower bar: real dropped passages often decode quietly
     "max_corrections_per_file": 40,       # cap LLM-reviewed corrections per file
     # local LLM server
     "ollama_url": "http://localhost:11434",
+    # review cockpit server: a FIXED port keeps the browser origin stable so your
+    # keep/drop choices in localStorage survive across launches (choices are also
+    # autosaved server-side to output/<stem>.choices.json, independent of origin)
+    "review_port": 8765,
     # paths
     "audio_dir": "data/audio",
     "transcript_dir": "data/transcripts",
@@ -51,7 +62,7 @@ def load_config(path: str = "config.yaml") -> dict:
             chosen = candidate
             break
     if chosen:
-        data = yaml.safe_load(chosen.read_text()) or {}
+        data = yaml.safe_load(chosen.read_text(encoding="utf-8")) or {}
         cfg.update(data)
     for k in _PATH_KEYS:
         cfg[k] = str(_resolve(cfg[k]))
@@ -80,3 +91,19 @@ def load_glossary(path: str | None = None) -> list[str]:
 def ensure_dirs(cfg: dict) -> None:
     for k in ("audio_dir", "transcript_dir", "output_dir"):
         Path(cfg[k]).mkdir(parents=True, exist_ok=True)
+
+
+# output/ layout — every generated file has ONE home:
+#   cache/    machine memory (transcriptions, re-listen clips) — safe to ignore
+#   reviews/  review page, data + your keep/drop choices, playback audio
+#   final/    corrected transcripts (the deliverables)
+#   changes/  change-tracked copies (struck-through removals, green additions)
+OUT_SUBDIRS = ("cache", "reviews", "final", "changes")
+
+
+def out_dirs(cfg: dict) -> dict:
+    root = Path(cfg["output_dir"])
+    dirs = {"root": root, **{n: root / n for n in OUT_SUBDIRS}}
+    for p in dirs.values():
+        p.mkdir(parents=True, exist_ok=True)
+    return dirs

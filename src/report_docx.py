@@ -13,6 +13,8 @@ from pathlib import Path
 
 from docx import Document
 
+from docx_fonts import normalize_fonts
+
 
 def _mmss(s):
     if s is None:
@@ -104,14 +106,19 @@ def write_docx_report(base_docx, review, out_path):
     else:
         doc.add_paragraph("None found.")
 
-    doc.add_heading("Overlapping speech to verify (//…// in the transcript)", level=2)
-    ovs = review.get("overlaps", [])
-    if ovs:
-        for o in ovs[:60]:
-            doc.add_paragraph(f"• [{o.get('speaker')}] {o.get('text', '')}")
+    doc.add_heading("Not heard in audio (in transcript only — possible fabrication, verify)", level=2)
+    bos = review.get("base_only", [])
+    if bos:
+        t = _grid(doc, ["~Time", "Speaker", "In transcript (never heard)"])
+        for d in bos:
+            c = t.add_row().cells
+            c[0].text = _mmss(d.get("start"))
+            c[1].text = str(d.get("speaker") or "")
+            c[2].text = d.get("base_text", "")
     else:
-        doc.add_paragraph("None marked.")
+        doc.add_paragraph("None found.")
 
+    normalize_fonts(doc)
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(out))
@@ -121,5 +128,5 @@ def write_docx_report(base_docx, review, out_path):
 if __name__ == "__main__":
     import json
     import sys
-    review = json.loads(Path(sys.argv[2]).read_text())
+    review = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
     print("saved ->", write_docx_report(sys.argv[1], review, sys.argv[3]))

@@ -3,7 +3,8 @@
 # --- Models ---
 llm_model: "qwen2.5:14b"                                # Ollama model for the review pass
 whisper_model: "mlx-community/whisper-large-v3-turbo"   # fast first-pass transcription
-whisper_model_careful: "mlx-community/whisper-large-v3-mlx"  # re-listen to flagged spans
+whisper_model_careful: "mlx-community/whisper-large-v3-mlx"  # re-listen to flagged spans ("" = skip)
+careful_pad_seconds: 8                                  # context (s) around each re-listen clip
 whisper_language: "auto"                                # "auto", "en", or "de"
 
 # --- Languages present (for the LLM's context) ---
@@ -14,10 +15,17 @@ low_confidence_threshold: 0.55   # word probability below this = suspect
 context_window_seconds: 20       # text context shown to the LLM around a span
 min_segment_gap_seconds: 0.5     # merge adjacent suspect words closer than this
 disagreement_min_confidence: 0.6 # only surface a disagreement if OUR re-transcription is this confident
+omission_min_confidence: 0.3     # lower bar for omissions: quiet/overlapped real speech decodes with low confidence
 max_corrections_per_file: 40     # cap how many corrections get LLM-reviewed per file
 
 # --- Local LLM server ---
 ollama_url: "http://localhost:11434"
+
+# --- Review cockpit ---
+# Fixed port so the browser origin stays stable and your keep/drop choices persist
+# across launches. (Choices are also autosaved to output/<stem>.choices.json, which
+# is origin-independent.) Change only if 8765 clashes with something else.
+review_port: 8765
 
 # --- Paths (keep ALL confidential data under data/) ---
 audio_dir: "data/audio"

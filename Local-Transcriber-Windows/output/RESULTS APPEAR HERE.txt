@@ -1,0 +1,5 @@
+Your results appear in this folder after you run "2 - PROCESS":
+  - <name>.review.html   the review page (opens in your browser)
+  - <name>.corrected.docx   created when you click "Apply" on the review page
+
+You can delete this note.

@@ -55,10 +55,18 @@ def align(base_segments, our_words, omission_min=5, base_only_min=5):
             base_meta.append({"orig": orig, "seg": si})
 
     our_norm, our_meta = [], []
-    for w in our_words:
+    for wi, w in enumerate(our_words):
         for norm, orig in _tokens(w.get("word", "")):
             our_norm.append(norm)
-            our_meta.append({"orig": orig, "start": w.get("start"), "prob": w.get("prob")})
+            our_meta.append({"orig": orig, "start": w.get("start"), "end": w.get("end"),
+                             "prob": w.get("prob"), "wi": wi})
+
+    def raw_span(j1, j2):
+        """Whisper's original wording (casing + punctuation) for meta tokens [j1:j2)."""
+        if j1 >= j2:
+            return ""
+        lo, hi = our_meta[j1]["wi"], our_meta[j2 - 1]["wi"]
+        return "".join((our_words[k].get("word") or "") for k in range(lo, hi + 1)).strip()
 
     sm = SequenceMatcher(None, base_norm, our_norm, autojunk=False)
     flags = []
@@ -78,29 +86,39 @@ def align(base_segments, our_words, omission_min=5, base_only_min=5):
                 "type": ftype,
                 "seg": base_meta[i1]["seg"] if i1 < len(base_meta) else None,
                 "base_text": " ".join(m["orig"] for m in base_meta[i1:i2]),
-                "audio_text": " ".join(m["orig"] for m in our_meta[j1:j2]),
+                "audio_text": raw_span(j1, j2),
                 "start": our_meta[j1]["start"] if j1 < len(our_meta) else None,
+                "end": our_meta[j2 - 1]["end"] if j1 < j2 <= len(our_meta) else None,
                 "our_conf": round(sum(probs) / len(probs), 3) if probs else None,
                 "base_ctx": _ctx(base_meta, i1, i2),
                 "audio_ctx": _ctx(our_meta, j1, j2),
             })
         elif tag == "insert" and (j2 - j1) >= omission_min:
+            probs = [our_meta[k]["prob"] for k in range(j1, j2) if our_meta[k]["prob"] is not None]
             flags.append({
                 "type": "omission",
                 "seg": base_meta[i1]["seg"] if i1 < len(base_meta) else (base_meta[-1]["seg"] if base_meta else None),
                 "base_text": "",
-                "audio_text": " ".join(m["orig"] for m in our_meta[j1:j2]),
+                "audio_text": raw_span(j1, j2),
                 "start": our_meta[j1]["start"] if j1 < len(our_meta) else None,
+                "end": our_meta[j2 - 1]["end"] if j1 < j2 <= len(our_meta) else None,
+                "our_conf": round(sum(probs) / len(probs), 3) if probs else None,
                 "base_ctx": _ctx(base_meta, i1, i1),
                 "audio_ctx": _ctx(our_meta, j1, j2),
             })
         elif tag == "delete" and (i2 - i1) >= base_only_min:
+            # no audio words here; the nearest audio time locates the gap for re-listen
+            if j1 > 0:
+                gap_at = our_meta[j1 - 1].get("end") or our_meta[j1 - 1].get("start")
+            else:
+                gap_at = our_meta[j1]["start"] if j1 < len(our_meta) else None
             flags.append({
                 "type": "base_only",
                 "seg": base_meta[i1]["seg"],
                 "base_text": " ".join(m["orig"] for m in base_meta[i1:i2]),
                 "audio_text": "",
-                "start": None,
+                "start": gap_at,
+                "end": None,
                 "base_ctx": _ctx(base_meta, i1, i2),
                 "audio_ctx": _ctx(our_meta, j1, j1),
             })
@@ -119,7 +137,7 @@ def main():
     ap.add_argument("whisper_json", help="our re-transcription (.whisper.json)")
     args = ap.parse_args()
     base = load_base(args.base)
-    our = json.loads(Path(args.whisper_json).read_text())
+    our = json.loads(Path(args.whisper_json).read_text(encoding="utf-8"))
     res = align(base["segments"], words_from_whisper(our))
     types = {}
     for f in res["flags"]:

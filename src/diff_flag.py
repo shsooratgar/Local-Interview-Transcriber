@@ -63,8 +63,8 @@ def main():
     ap.add_argument("--threshold", type=float, default=0.75)
     args = ap.parse_args()
 
-    a = json.loads(Path(args.a).read_text())
-    b = json.loads(Path(args.b).read_text())
+    a = json.loads(Path(args.a).read_text(encoding="utf-8"))
+    b = json.loads(Path(args.b).read_text(encoding="utf-8"))
     flags = diff_windows(a, b, args.window, args.threshold)
     print(f"{len(flags)} disagreement window(s) (similarity < {args.threshold})\n")
     for f in flags[:40]:

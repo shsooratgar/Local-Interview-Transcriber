@@ -28,7 +28,7 @@ def _save(name, sr, audio, segments):
     d.mkdir(parents=True, exist_ok=True)
     wav = d / f"{name}.wav"
     sf.write(wav, audio, sr)
-    (d / f"{name}.ref.json").write_text(json.dumps(segments, ensure_ascii=False, indent=2))
+    (d / f"{name}.ref.json").write_text(json.dumps(segments, ensure_ascii=False, indent=2), encoding="utf-8")
     txt = "\n".join(
         (f"[{s['speaker']}] {s['text']}" if s.get("speaker") else s["text"]) for s in segments
     )

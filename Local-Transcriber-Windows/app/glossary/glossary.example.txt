@@ -1,0 +1,33 @@
+# Domain glossary — one term per line.
+# Helps Whisper recognize technical words and tells the LLM these spellings
+# are correct. Mix English and German freely. Lines starting with # are comments.
+#
+# Copy to glossary/glossary.txt and edit. The real glossary.txt is git-ignored
+# (put interviewee / company / place names there safely).
+
+# --- AI / ML ---
+transformer
+attention mechanism
+fine-tuning
+reinforcement learning
+neural network
+LLM
+embedding
+Bestärkendes Lernen
+neuronales Netz
+
+# --- Process engineering (example) ---
+catalysis
+catalyst
+Katalysator
+distillation column
+Destillationskolonne
+stoichiometry
+Stöchiometrie
+mass transfer
+Stoffübergang
+reaction kinetics
+Reaktionskinetik
+
+# --- Proper nouns / names ---
+# (add to glossary.txt, not here — these can be confidential)

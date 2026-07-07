@@ -88,7 +88,7 @@ def main():
 
     cfg = load_config()
     thr = args.threshold if args.threshold is not None else cfg["low_confidence_threshold"]
-    transcript = json.loads(Path(args.whisper_json).read_text())
+    transcript = json.loads(Path(args.whisper_json).read_text(encoding="utf-8"))
     suspects = find_suspects(transcript, thr,
                              cfg["min_segment_gap_seconds"], cfg["context_window_seconds"])
 

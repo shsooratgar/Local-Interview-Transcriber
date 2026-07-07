@@ -1,0 +1,65 @@
+LOCAL INTERVIEW TRANSCRIBER  (Windows)
+=======================================
+
+WHAT IT DOES
+  Checks an interview transcript against its audio recording -- entirely on your
+  own computer (nothing is ever uploaded to the internet) -- and opens a review
+  page in your browser where you can accept or reject suggested fixes.
+
+
+ONE-TIME SETUP   (about 15-40 minutes, needs internet -- do this only once)
+---------------------------------------------------------------------------
+  1. Double-click:   1 - SETUP (run once).bat
+  2. If Windows shows a blue box "Windows protected your PC":
+        click "More info"  ->  "Run anyway".
+  3. Let it run to the end. A black window will show its progress.
+  4. If it ever stops and says something was "not found", just close the
+     window and double-click "1 - SETUP" one more time -- it will continue.
+
+
+EACH TIME YOU WANT TO CHECK A FILE
+----------------------------------
+  1. Put the AUDIO file (mp3, m4a, wav, ...) into the   "audio"   folder.
+  2. Put the TRANSCRIPT (.docx) into the                "transcripts"  folder.
+        -> Use ONE audio file and ONE transcript at a time.
+  3. Double-click:   2 - PROCESS (double-click).bat
+  4. A black window opens and works -- LEAVE IT OPEN. On a normal laptop
+     (no gaming graphics card) a one-hour interview can take a FEW HOURS.
+     Tips for long runs: keep the laptop PLUGGED IN, and set
+     Settings > System > Power > "Sleep when plugged in" to Never
+     (otherwise Windows may put the PC to sleep and stop the run).
+  5. Your web browser opens the review page automatically when it is done.
+  6. Go through the suggestions. Your choices SAVE AUTOMATICALLY
+     (look for the green "saved" note on the page).
+  7. When you are finished, close the black window.
+
+
+WHERE ARE MY RESULTS?
+  After you click "Apply" on the review page:
+  - output\final\    the corrected transcript (the document to use)
+  - output\changes\  the same transcript with all changes visible
+                     (removed text struck through, added text in green)
+  - output\reviews\  the review page and your saved choices
+  - output\cache\    internal working files -- you can ignore this
+
+
+IMPORTANT
+  - The black window IS the program running. Keep it open while you review;
+    closing it stops the review page from saving.
+  - The very FIRST run downloads the speech model (about 3 GB) before it can
+    start -- the window can look stuck for a while. That happens only once.
+  - Everything stays on this computer. Nothing is sent online.
+
+
+IF SOMETHING LOOKS WRONG
+  - Yellow "Warning" or "UserWarning" text scrolling by:  NORMAL, ignore it.
+  - Window shows nothing new for a long time on the first run:  it is
+    downloading the 3 GB speech model -- give it time.
+  - The window disappeared / the run just ended overnight:  the PC most
+    likely went to sleep. Set Settings > System > Power >
+    "Sleep when plugged in" to Never and run "2 - PROCESS" again.
+    (Fully finished steps are remembered; an interrupted step runs again.)
+  - A message starting with [X]:  take a screenshot of the whole window
+    and send it to whoever gave you this tool.
+  - You moved or renamed this folder and something broke:  run
+    "1 - SETUP (run once)" again -- it repairs itself.

@@ -1,0 +1,11 @@
+# Windows / cross-platform dependencies (NO mlx-whisper).
+# Installed automatically by "1 - SETUP (run once).bat".
+faster-whisper        # cross-platform Whisper (CPU/NVIDIA) -- transcription
+python-docx           # read/write .docx transcripts + reports
+requests              # talk to the local Ollama server
+pyyaml                # read config.yaml
+tqdm                  # progress bars
+openpyxl              # (optional) xlsx export
+webvtt-py             # parse .vtt transcripts
+beautifulsoup4        # parse noScribe .html (if ever needed)
+lxml                  # html/xml backend

@@ -1,0 +1,4 @@
+Put ONE transcript file (.docx, e.g. exported from noScribe) in this folder,
+then double-click "2 - PROCESS" in the main folder.
+
+You can delete this note.

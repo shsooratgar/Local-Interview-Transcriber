@@ -66,6 +66,8 @@ def review_span(span_text, context_text, glossary_terms, model, ollama_url):
     try:
         verdict = json.loads(resp)
     except json.JSONDecodeError:
+        verdict = None
+    if not isinstance(verdict, dict):
         return {"is_error": None, "correction": "",
                 "reason": f"unparseable LLM output: {resp[:200]}", "confidence": 0.0}
 
@@ -119,9 +121,25 @@ def review_disagreement(base_text, audio_text, context_text, model, ollama_url, 
     )
     r.raise_for_status()
     try:
-        return json.loads(r.json().get("response", "{}"))
+        verdict = json.loads(r.json().get("response", "{}"))
     except json.JSONDecodeError:
+        verdict = None
+    if not isinstance(verdict, dict):
         return {"is_error": None, "correction": "", "reason": "unparseable", "confidence": 0.0}
+
+    # Grounding guard (same idea as review_span): the correction must stay close to
+    # one of the two REAL candidates — reject anything the LLM rewrote freely.
+    if verdict.get("is_error") and verdict.get("correction"):
+        corr = str(verdict["correction"])
+        sim = max(_similar(corr, audio_text), _similar(corr, base_text))
+        words_added = len(corr.split()) - max(len(audio_text.split()), len(base_text.split()))
+        if sim < 0.5 or words_added >= 3:
+            verdict["is_error"] = False
+            verdict["reason"] = (f"rejected (correction strays from both candidates: "
+                                 f"sim={sim:.2f}, +{words_added} words) — was: {corr!r}")
+            verdict["correction"] = ""
+            verdict["confidence"] = 0.0
+    return verdict
 
 
 RECOVERED_PROMPT = """In an interview transcript, this spot was reduced to "{base_text}", but a second
@@ -154,9 +172,12 @@ def review_recovered(base_text, audio_text, context_text, model, ollama_url):
     )
     r.raise_for_status()
     try:
-        return json.loads(r.json().get("response", "{}"))
+        verdict = json.loads(r.json().get("response", "{}"))
     except json.JSONDecodeError:
+        verdict = None
+    if not isinstance(verdict, dict):
         return {"text": audio_text, "other_speaker": None, "reason": "unparseable", "confidence": 0.0}
+    return verdict
 
 
 def main():
