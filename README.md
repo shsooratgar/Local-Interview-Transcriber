@@ -36,7 +36,8 @@ python src/pipeline.py "data/audio/file.m4a" --base "data/transcripts/file.docx"
 Add domain terms / abbreviations to `glossary/glossary.txt` to bias the transcription and the reviewer (re-run with `--force` to re-transcribe).
 
 ## Layout
-`src/`: transcribe · transcript_io · align · llm_review · summarize · pipeline · report_docx · report_html · apply_docx · serve_review · flag · common.
+`src/`: transcribe · transcript_io · align · llm_review · summarize · pipeline · report_docx · report_html · apply_docx · serve_review · batch · flag · common.
+`Local-Transcriber-Windows/` — self-contained kit for Windows collaborators; **see [WINDOWS.md](WINDOWS.md) before touching it** (sync contract, platform rules, release script `tools/build_windows_bundle.sh`).
 `review.command` — double-click launcher. `config.example.yaml` — tuning (confidence gate, per-file cap, models, `review_port`). Your keep/drop/edit choices autosave to `output/<stem>.choices.json` and reload on open.
 
 ## Status
