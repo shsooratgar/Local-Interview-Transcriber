@@ -13,8 +13,6 @@ from pathlib import Path
 
 from docx import Document
 
-from docx_fonts import normalize_fonts
-
 
 def _mmss(s):
     if s is None:
@@ -118,7 +116,6 @@ def write_docx_report(base_docx, review, out_path):
     else:
         doc.add_paragraph("None found.")
 
-    normalize_fonts(doc)
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(out))

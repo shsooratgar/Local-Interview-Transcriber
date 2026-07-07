@@ -24,7 +24,6 @@ from pathlib import Path
 from docx import Document
 from docx.shared import RGBColor
 
-from docx_fonts import normalize_fonts
 from transcript_io import _parse_turn
 
 
@@ -370,7 +369,6 @@ def _apply_to_doc(base_docx, review, decisions, out_path, mark=False):
         except Exception as e:  # noqa: BLE001 — an odd table must never break Apply
             counts["header"] = f"skipped ({e})"
 
-    normalize_fonts(doc)
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(out_path))
