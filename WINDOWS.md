@@ -200,7 +200,8 @@ them, walk every parenthesis and variable expansion by hand.
 | "You are sending unauthenticated requests to the HF Hub" | normal | ignore |
 | Window looks frozen on first run | 3 GB model download | wait; happens once |
 | Run vanished overnight, no `[X]` | Windows sleep | power settings → sleep Never; re-run |
-| Crash at "reviewing" stage | Ollama service not running / model name mismatch with SETUP pull | preflight handles service; check `llm_model` vs SETUP |
+| `404 Not Found … /api/generate` | LLM model missing from the Ollama store (July 2026: cost a full CPU run) | pipeline now verifies + auto-pulls the model at START (`ensure_llm_ready`); manual: `ollama pull <llm_model>` |
+| Crash at "reviewing" stage (other) | Ollama service died mid-run / model name mismatch with SETUP pull | launcher preflight starts the service; keep `llm_model` == SETUP's pull; transcription + re-listen caches survive (saved incrementally), so a re-run resumes in minutes |
 | Everything extremely slow | 8 GB RAM: large-v3 (~3 GB) + qwen 7b (~4.5 GB) contend | `whisper_model_faster: medium` in config.yaml |
 
 ## 9. Known gaps / future work

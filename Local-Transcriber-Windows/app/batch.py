@@ -134,7 +134,10 @@ def main():
         return
 
     import json
+    from llm_review import ensure_llm_ready
     from pipeline import process_one
+
+    ensure_llm_ready(cfg["llm_model"], cfg["ollama_url"])  # fail in seconds, not hours
 
     rows, failed = [], []
     todo = [(a, d) for a, d in pairs if d is not None]

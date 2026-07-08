@@ -21,6 +21,53 @@ import requests
 
 from common import load_config, load_glossary
 
+def ensure_llm_ready(model, ollama_url):
+    """Fail fast BEFORE hours of transcription: verify the Ollama server is up
+    and the model is downloaded; pull it if missing. (A missing model used to
+    surface as a 404 only at review time — after a collaborator's multi-hour
+    CPU run.) Raises SystemExit with a plain-language message on failure."""
+    try:
+        r = requests.get(f"{ollama_url}/api/tags", timeout=10)
+        r.raise_for_status()
+        names = {m.get("name") for m in r.json().get("models", [])}
+    except requests.RequestException as e:
+        raise SystemExit(
+            f"[X] Cannot reach the local AI engine (Ollama) at {ollama_url}\n"
+            f"    ({e})\n"
+            "    Start Ollama (or re-run the setup) and try again.")
+    if model in names or f"{model}:latest" in names:
+        return
+    print(f"AI model '{model}' is not downloaded yet — fetching it now (one time)…", flush=True)
+    try:
+        with requests.post(f"{ollama_url}/api/pull", json={"model": model},
+                           stream=True, timeout=3600) as r:
+            r.raise_for_status()
+            last_status, last_bucket = "", -1
+            for line in r.iter_lines():
+                if not line:
+                    continue
+                info = json.loads(line)
+                if info.get("error"):
+                    raise RuntimeError(info["error"])
+                status = info.get("status", "")
+                total, done = info.get("total") or 0, info.get("completed") or 0
+                if total:  # big layer: print every ~10%
+                    bucket = int(done * 10 / total)
+                    if bucket != last_bucket:
+                        print(f"  downloading… {done * 100 // total}%", flush=True)
+                        last_bucket = bucket
+                elif status != last_status:
+                    print(f"  {status}", flush=True)
+                    last_status = status
+        print(f"  model '{model}' ready.", flush=True)
+    except Exception as e:  # noqa: BLE001 — turn into a clear, actionable exit
+        raise SystemExit(
+            f"[X] Could not download the AI model '{model}'\n"
+            f"    ({e})\n"
+            f"    Check the internet connection, then run the setup again\n"
+            f"    (or in a terminal:  ollama pull {model})")
+
+
 PROMPT = """An automatic speech recognizer produced this transcript passage. The part wrapped in
 >>> <<< had low confidence and may be misheard. The text may be English or German — do not translate.
 

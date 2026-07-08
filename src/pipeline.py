@@ -24,7 +24,7 @@ from tqdm import tqdm
 from align import align, words_from_whisper
 from common import load_config, load_glossary, out_dirs
 from flag import find_suspects
-from llm_review import review_disagreement, review_recovered, review_span
+from llm_review import ensure_llm_ready, review_disagreement, review_recovered, review_span
 from summarize import suggest_quotes, summarize_text
 from transcribe import cached_transcribe, transcribe_clip
 from transcript_io import load_base
@@ -156,9 +156,11 @@ def _support(careful_tokens, span_tokens):
     return sum(b.size for b in sm.get_matching_blocks()) / len(span_tokens)
 
 
-def _careful_check(audio, flags, cfg, cache, kind):
+def _careful_check(audio, flags, cfg, cache, kind, cache_path=None):
     """Re-decode a short clip around each flag with the careful Whisper model and
-    vote. Returns the surviving flags; the clip decode is cached in *cache*.
+    vote. Returns the surviving flags; the clip decode is cached in *cache* and
+    persisted to *cache_path* after EVERY clip — this pass costs real time
+    (~1 min/clip on a CPU laptop) and must survive a later crash.
       disagreement/recovered : drop when the re-listen sides with the transcript
       omission               : drop when the re-listen does not reproduce the words
       base_only              : drop when the re-listen DOES hear the transcript's words
@@ -190,6 +192,9 @@ def _careful_check(audio, flags, cfg, cache, kind):
                 kept.append(f)
                 continue
             cache[key] = text
+            if cache_path:
+                cache_path.write_text(json.dumps(cache, ensure_ascii=False, indent=2),
+                                      encoding="utf-8")
         ct = _norm_words(text)
         sb = _support(ct, _norm_words(f.get("base_text") or ""))
         sa = _support(ct, _norm_words(f.get("audio_text") or ""))
@@ -242,7 +247,7 @@ def review_with_base(audio, base_path, cfg, do_summary=True):
     care_cache = json.loads(care_path.read_text(encoding="utf-8")) if care_path.exists() else {}
 
     n_before = len(candidates)
-    candidates = _careful_check(audio, candidates, cfg, care_cache, "disagreement")
+    candidates = _careful_check(audio, candidates, cfg, care_cache, "disagreement", care_path)
     if len(candidates) != n_before:
         print(f"re-listen vetoed {n_before - len(candidates)} of {n_before} "
               f"(sided with the transcript)", flush=True)
@@ -265,7 +270,7 @@ def review_with_base(audio, base_path, cfg, do_summary=True):
     omissions = [f for f in al["flags"] if f["type"] == "omission"
                  and not _degenerate(_audio_region(f))
                  and (f.get("our_conf") or 0) >= om_min_conf]
-    omissions = _careful_check(audio, omissions, cfg, care_cache, "omission")
+    omissions = _careful_check(audio, omissions, cfg, care_cache, "omission", care_path)
     # present everything in time order
     disagreements.sort(key=lambda x: x.get("start") if x.get("start") is not None else 0.0)
     omissions.sort(key=lambda x: x.get("start") if x.get("start") is not None else 0.0)
@@ -275,7 +280,7 @@ def review_with_base(audio, base_path, cfg, do_summary=True):
     # base-only passages: in the transcript but never heard by our pass — possible
     # noScribe fabrication. The re-listen drops the ones it can actually hear.
     base_only = [f for f in al["flags"] if f["type"] == "base_only"]
-    base_only = _careful_check(audio, base_only, cfg, care_cache, "base_only")
+    base_only = _careful_check(audio, base_only, cfg, care_cache, "base_only", care_path)
     for f in base_only:
         f["speaker"] = base["segments"][f["seg"]]["speaker"] if f.get("seg") is not None else None
     base_only.sort(key=lambda x: x.get("seg") or 0)
@@ -285,7 +290,7 @@ def review_with_base(audio, base_path, cfg, do_summary=True):
                  and not _acronym_downgrade(f["base_text"], f["audio_text"])
                  and (f.get("our_conf") or 0) >= min_conf]
     rec_flags.sort(key=lambda f: f.get("our_conf") or 0, reverse=True)
-    rec_flags = _careful_check(audio, rec_flags[:cap], cfg, care_cache, "recovered")
+    rec_flags = _careful_check(audio, rec_flags[:cap], cfg, care_cache, "recovered", care_path)
     if rec_flags:
         print(f"{len(rec_flags)} recovered (dropped) passages; checking…", flush=True)
     recovered = []
@@ -349,6 +354,7 @@ def main():
     args = ap.parse_args()
 
     cfg = load_config()
+    ensure_llm_ready(cfg["llm_model"], cfg["ollama_url"])  # fail in seconds, not hours
     t0 = time.time()
 
     if args.base:
