@@ -129,8 +129,16 @@ Two consequences worth remembering:
 - `PROCESS` uses `setlocal enabledelayedexpansion` + `!AUDIO!` because the
   file variables are set inside `for` loops. If you add `echo` lines there,
   remember `!` is special under delayed expansion.
-- Inside parenthesized `if (...)` blocks, `echo` text containing parentheses
-  must have them **balanced** — a lone `)` ends the block mid-line.
+- Inside parenthesized `if (...)` blocks, `echo` text must contain **NO
+  unquoted parentheses at all** — balance does NOT protect you (a previous
+  version of this document claimed it did; the resulting bug killed SETUP
+  silently after pip on every fresh PC — TEST-REPORT.md BUG 1, July 2026).
+  cmd aborts the whole batch at parse time with `. was unexpected at this
+  time.`. Safe forms: parens inside double quotes (`"1 - SETUP (run once)"`),
+  escaped `^)`, or no parens. Empirically verified on real Windows.
+- Corollary: **.bat edits cannot be validated on macOS.** Lint by these rules
+  conservatively, but any non-trivial launcher change needs a run on a real
+  Windows machine (see TEST-REPORT.md for the field-test recipe).
 - Error paths end with `pause` so the non-technical user sees the `[X]`
   message instead of a vanishing window. Keep that pattern.
 - SETUP is **re-runnable by design** ("if it stops, run it again") — winget
@@ -195,7 +203,9 @@ them, walk every parenthesis and variable expansion by hand.
 
 | Symptom on the user's PC | Cause | Fix |
 |---|---|---|
+| SETUP window vanishes right after the pip step, no `[X]`, models missing → later 404 at review | BUG 1 (zips before 2026-07-09): unquoted parens in an echo inside a block killed the batch at parse time | update to a fixed zip / fixed SETUP.bat; root cause of BOTH July 404 incidents |
 | `ModuleNotFoundError` at line 1 of anything | moved folder with pre-July bats (activate.bat) | replace bats / re-run SETUP; new bats immune |
+| Audio ▶ buttons dead; a "Download File Info" dialog pops up instead | a download manager (IDM etc.) intercepts the playback .mp3 | cancel the dialog; add 127.0.0.1 to the manager's exceptions or use a browser without the extension |
 | Yellow `huggingface_hub` symlink warnings | normal on Windows | ignore |
 | "You are sending unauthenticated requests to the HF Hub" | normal | ignore |
 | Window looks frozen on first run | 3 GB model download | wait; happens once |

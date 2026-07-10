@@ -29,6 +29,8 @@ EACH TIME YOU WANT TO CHECK A FILE
      Settings > System > Power > "Sleep when plugged in" to Never
      (otherwise Windows may put the PC to sleep and stop the run).
   5. Your web browser opens the review page automatically when it is done.
+     (If it does not open, or you closed the tab: type  127.0.0.1:8765
+     into your browser's address bar while the black window is running.)
   6. Go through the suggestions. Your choices SAVE AUTOMATICALLY
      (look for the green "saved" note on the page).
   7. When you are finished, close the black window.

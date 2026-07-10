@@ -1,0 +1,24 @@
+# Local Transcriber - Windows settings. (Advanced; most people never edit this.)
+
+whisper_backend: faster             # cross-platform Whisper engine (works on Windows)
+whisper_model_faster: large-v3      # speech model (downloaded once during setup)
+whisper_device: auto                # auto-detects an NVIDIA GPU; otherwise uses the CPU
+whisper_compute_type: int8          # int8 = fast and light on a CPU
+
+whisper_language: auto              # auto | en | de
+
+whisper_model_careful: large-v3     # double-checks every flagged spot by re-listening
+                                    # to a short clip. More accurate but slower on a
+                                    # CPU-only laptop; set to "" to skip that step.
+
+llm_model: qwen2.5:7b              # smaller model so it's usable on a CPU-only laptop.
+                                    # If this PC is powerful (good NVIDIA GPU), you can switch to
+                                    # qwen2.5:14b for better suggestions -- then run once in a
+                                    # terminal:  ollama pull qwen2.5:14b
+
+# Folders (relative to this package). Leave these as-is.
+audio_dir: audio
+transcript_dir: transcripts
+output_dir: output
+glossary_file: app/glossary/glossary.example.txt
+review_port: 8765

@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 cd /d "%~dp0"
 echo ============================================================
 echo   LOCAL TRANSCRIBER - ONE-TIME SETUP
@@ -57,7 +58,7 @@ set "PY=%~dp0app\.venv\Scripts\python.exe"
 "%PY%" -m pip install -r "app\requirements-windows.txt"
 if errorlevel 1 (
   echo.
-  echo [X] Installing the Python packages failed (see above). Check your internet and re-run.
+  echo [X] Installing the Python packages failed - see above. Check your internet and re-run.
   echo.
   pause
   exit /b 1

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -93,12 +94,24 @@ class Handler(SimpleHTTPRequestHandler):
         pass
 
 
+class _QuietServer(ThreadingHTTPServer):
+    """Swallow routine client-disconnect errors (browser seeking in the audio,
+    tab closed, page refreshed) — the default handler prints a 20-line red
+    traceback that makes non-technical users think the tool crashed."""
+
+    def handle_error(self, request, client_address):
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (ConnectionResetError, ConnectionAbortedError, BrokenPipeError)):
+            return
+        super().handle_error(request, client_address)
+
+
 def _serve(handler, port):
     """Bind the requested port; fall back to a random one if it is busy."""
     try:
-        return ThreadingHTTPServer(("127.0.0.1", port), handler)
+        return _QuietServer(("127.0.0.1", port), handler)
     except OSError:
-        srv = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        srv = _QuietServer(("127.0.0.1", 0), handler)
         print(f"port {port} is busy — using random port {srv.server_address[1]} instead. "
               f"(Your choices still autosave to output/*.choices.json regardless.)")
         return srv

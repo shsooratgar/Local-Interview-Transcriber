@@ -253,6 +253,9 @@ def review_with_base(audio, base_path, cfg, do_summary=True):
               f"(sided with the transcript)", flush=True)
 
     disagreements = []
+    if candidates:
+        print("Waking the language model - the FIRST answer can take a few minutes "
+              "on a laptop; after that it speeds up.", flush=True)
     for f in tqdm(candidates, desc="LLM review", unit="flag"):
         ctx = _context_for(base["segments"], f.get("seg"))
         v = review_disagreement(f["base_text"], f["audio_text"], ctx,

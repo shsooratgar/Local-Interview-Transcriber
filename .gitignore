@@ -6,8 +6,10 @@ data/*
 output/*
 !output/README.md
 
-# Local config (may contain paths/names) and the real glossary
-config.yaml
+# Local config (may contain paths/names) and the real glossary.
+# ROOT-ANCHORED on purpose: the Windows bundle's config.yaml MUST be tracked
+# (an unanchored pattern once shipped configless bundles — TEST-REPORT.md BUG 2)
+/config.yaml
 glossary/*.txt
 !glossary/*.example.txt
 
