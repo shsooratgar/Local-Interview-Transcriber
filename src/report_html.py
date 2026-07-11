@@ -65,6 +65,13 @@ TEMPLATE = """<!doctype html>
  #sb a{display:block;padding:7px 14px;font-size:13px;color:#1a1a1a;text-decoration:none;border-left:3px solid transparent;word-break:break-word;line-height:1.35}
  #sb a:hover{background:#f2f6ff}
  #sb a.on{border-left-color:#0066cc;background:#eaf3ff;font-weight:600}
+ .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;border:1px solid #b0b0b0;background:#fff;flex:none}
+ .dot.wip{background:#f2c94c;border-color:#cfa22e}
+ .dot.done{background:#2ea052;border-color:#1d7a3c}
+ #sb a{display:flex;align-items:baseline}
+ #sblegend{margin:0 14px 10px;font-size:11px;color:#666}
+ #sblegend div{display:flex;align-items:baseline;padding:1px 0}
+ #sblegend b{font-weight:600;color:#333;margin-left:4px}
  #sbtoggle{position:fixed;top:10px;left:10px;z-index:7;width:30px;height:30px;border:1px solid #cdd6e4;background:#fff;border-radius:6px;cursor:pointer;font-size:15px;line-height:1}
  body.sb{margin-left:230px}
  body:not(.sb) #sb{transform:translateX(-100%)}
@@ -101,7 +108,8 @@ TEMPLATE = """<!doctype html>
  function mark(btn,val){ var tr=btn.closest('tr'); var nv=tr.getAttribute('data-state')===val?'':val; tr.setAttribute('data-state',nv); var inp=tr.querySelector('input.edit'); tr.setAttribute('data-mode', nv?'btn':((inp&&inp.value.trim())?'txt':'')); tr.querySelectorAll('.dec button').forEach(function(b){ b.classList.toggle('on', b===btn && nv!==''); }); updateTally(); saveState(); }
  function onedit(inp){ var tr=inp.closest('tr'); tr.setAttribute('data-mode', inp.value.trim()?'txt':(tr.getAttribute('data-state')?'btn':'')); updateTally(); saveState(); }
  function accepted(r){ var mo=r.getAttribute('data-mode'); return mo==='txt' || (mo!=='txt' && r.getAttribute('data-state')==='keep'); }
- function updateTally(){ var k=0,d=0,rs=rows(); rs.forEach(function(r){ var mo=r.getAttribute('data-mode'),s=r.getAttribute('data-state'); if(mo==='txt')k++; else if(s==='keep')k++; else if(s==='drop')d++; }); document.getElementById('tally').textContent='kept '+k+' · dropped '+d+' · '+(rs.length-k-d)+' to review'; }
+ function updateTally(){ var k=0,d=0,rs=rows(); rs.forEach(function(r){ var mo=r.getAttribute('data-mode'),s=r.getAttribute('data-state'); if(mo==='txt')k++; else if(s==='keep')k++; else if(s==='drop')d++; }); document.getElementById('tally').textContent='kept '+k+' · dropped '+d+' · '+(rs.length-k-d)+' to review'; sbStatus(k+d, rs.length); }
+ function sbStatus(decided,total){ var a=document.querySelector('#sb a.on'); if(!a) return; var st= total===0 ? 'done' : (decided<=0 ? 'none' : (decided>=total ? 'done' : 'wip')); var old=a.getAttribute('data-status')||'none'; if(old===st) return; a.setAttribute('data-status',st); var dot=a.querySelector('.dot'); if(dot) dot.className='dot '+(st==='none'?'':st); var eo=document.getElementById('sbc-'+old), en=document.getElementById('sbc-'+st); if(eo) eo.textContent=Math.max(0,(parseInt(eo.textContent,10)||0)-1); if(en) en.textContent=(parseInt(en.textContent,10)||0)+1; }
  function buildMap(){ var m={}; rows().forEach(function(r){ var st=r.getAttribute('data-state')||''; var mo=r.getAttribute('data-mode')||''; var inp=r.querySelector('input.edit'); var ed=inp?inp.value:''; if(st||ed||mo) m[r.getAttribute('data-key')]={s:st,e:ed,m:mo}; }); return m; }
  function applyMap(m){ rows().forEach(function(r){ var v=m[r.getAttribute('data-key')]; if(!v) return; if(v.s) r.setAttribute('data-state',v.s); if(v.m) r.setAttribute('data-mode',v.m); var inp=r.querySelector('input.edit'); if(inp&&v.e) inp.value=v.e; r.querySelectorAll('.dec button').forEach(function(b){ b.classList.toggle('on', b.textContent===v.s && v.m==='btn'); }); }); }
  function setSaved(ok){ var el=document.getElementById('saved'); if(!el) return; if(!CHOICES){ el.textContent=''; return; } el.textContent= ok ? ('saved ✓ '+new Date().toLocaleTimeString()) : 'NOT saved — is the server (launcher) running?'; el.style.color= ok ? '#137a3e' : '#b00020'; }
@@ -196,15 +204,25 @@ def _web_audio_src(audio_path, out_dir):
 
 
 def _sidebar_html(interviews, active_stem):
-    """Collapsible left sidebar listing all processed interviews (server mode only:
-    the links go through the server, which regenerates each page on demand)."""
-    items = "".join(
-        f'<a class="{"on" if stem == active_stem else ""}" '
-        f'href="/reviews/{quote(stem)}.review.html">{_esc(stem)}</a>'
-        for stem in interviews)
+    """Collapsible left sidebar listing all processed interviews with a review-
+    progress dot each: white = not started, yellow = in progress, green = every
+    suggestion decided. interviews: [(stem, "none"|"wip"|"done"), ...]."""
+    counts = {"done": 0, "wip": 0, "none": 0}
+    items = []
+    for stem, status in interviews:
+        counts[status] = counts.get(status, 0) + 1
+        items.append(
+            f'<a class="{"on" if stem == active_stem else ""}" data-status="{status}" '
+            f'href="/reviews/{quote(stem)}.review.html">'
+            f'<span class="dot {"" if status == "none" else status}"></span>{_esc(stem)}</a>')
+    legend = (
+        '<div id="sblegend">'
+        f'<div><span class="dot done"></span>finished<b id="sbc-done">{counts["done"]}</b></div>'
+        f'<div><span class="dot wip"></span>in progress<b id="sbc-wip">{counts["wip"]}</b></div>'
+        f'<div><span class="dot"></span>not started<b id="sbc-none">{counts["none"]}</b></div></div>')
     return (
         '<button id="sbtoggle" onclick="sbToggle()" title="show/hide interviews">☰</button>'
-        f'<nav id="sb"><h3>Interviews ({len(interviews)})</h3>{items}</nav>'
+        f'<nav id="sb"><h3>Interviews ({len(interviews)})</h3>{legend}{"".join(items)}</nav>'
         "<script>function sbToggle(){document.body.classList.toggle('sb');"
         "try{localStorage.setItem('cockpit:sb',document.body.classList.contains('sb')?'1':'0')}catch(e){}}"
         "try{if(localStorage.getItem('cockpit:sb')!=='0')document.body.classList.add('sb')}"

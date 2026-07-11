@@ -73,6 +73,37 @@ def _find_review_json(stem):
     return None
 
 
+def _interview_status(rj):
+    """Review progress for the sidebar dot. A suggestion counts as decided when
+    it has keep, drop, or a typed override — the same rule the page's tally and
+    apply_docx use. none = untouched · wip = some decided · done = all decided."""
+    try:
+        r = json.loads(rj.read_text(encoding="utf-8"))
+        total = sum(len(r.get(k) or [])
+                    for k in ("disagreements", "recovered", "omissions", "base_only"))
+    except Exception:  # noqa: BLE001
+        return "none"
+    if total == 0:
+        return "done"  # nothing to decide
+    stem = rj.name[: -len(".review.json")]
+    decided = 0
+    for cand in (REV / f"{stem}.choices.json", OUT / f"{stem}.choices.json"):
+        if cand.exists():
+            try:
+                choices = json.loads(cand.read_text(encoding="utf-8"))
+            except Exception:  # noqa: BLE001
+                break
+            for v in choices.values():
+                if isinstance(v, dict) and (
+                        v.get("s") in ("keep", "drop")
+                        or (v.get("m") == "txt" and (v.get("e") or "").strip())):
+                    decided += 1
+            break
+    if decided <= 0:
+        return "none"
+    return "done" if decided >= total else "wip"
+
+
 class Handler(SimpleHTTPRequestHandler):
     review_path = None
 
@@ -111,7 +142,8 @@ class Handler(SimpleHTTPRequestHandler):
                 stem = rj.name[: -len(".review.json")]
                 try:
                     review = json.loads(rj.read_text(encoding="utf-8"))
-                    interviews = [p.name[: -len(".review.json")] for p in _all_reviews()]
+                    interviews = [(p.name[: -len(".review.json")], _interview_status(p))
+                                  for p in _all_reviews()]
                     write_html_report(review["audio"], review, REV / f"{stem}.review.html",
                                       interviews=interviews)
                 except Exception as e:  # noqa: BLE001 — serve the existing file instead
