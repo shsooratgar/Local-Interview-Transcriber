@@ -21,11 +21,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 import webbrowser
 
 from apply_docx import apply_decisions
@@ -53,6 +54,25 @@ def _choices_path(review):
     return REV / (Path(review["audio"]).stem + ".choices.json")
 
 
+def _all_reviews():
+    """Every processed interview's review.json, newest first, deduped."""
+    seen, out = set(), []
+    for p in sorted(list(REV.glob("*.review.json")) + list(OUT.glob("*.review.json")),
+                    key=lambda p: p.stat().st_mtime, reverse=True):
+        if p.name not in seen:
+            seen.add(p.name)
+            out.append(p)
+    return out
+
+
+def _find_review_json(stem):
+    stem = Path(stem).name  # no path tricks
+    for cand in (REV / f"{stem}.review.json", OUT / f"{stem}.review.json"):
+        if cand.exists():
+            return cand
+    return None
+
+
 class Handler(SimpleHTTPRequestHandler):
     review_path = None
 
@@ -63,26 +83,56 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _body_decisions(self):
+    def _payload(self):
         n = int(self.headers.get("Content-Length", 0))
-        return (json.loads(self.rfile.read(n) or "{}")).get("decisions", {})
+        data = json.loads(self.rfile.read(n) or "{}")
+        return data.get("stem"), data.get("decisions", {})
+
+    def _review_for(self, stem):
+        """The review a POST belongs to: the page sends its stem (sidebar lets the
+        user switch interviews); fall back to the launch-time review."""
+        rj = _find_review_json(stem) if stem else None
+        return Path(rj) if rj else Path(self.review_path)
+
+    def do_GET(self):
+        path = unquote(self.path.split("?", 1)[0])
+        if path in ("", "/"):  # bare 127.0.0.1:8765 -> newest interview
+            reviews = _all_reviews()
+            if reviews:
+                stem = reviews[0].name[: -len(".review.json")]
+                self.send_response(302)
+                self.send_header("Location", "/reviews/" + quote(f"{stem}.review.html"))
+                self.end_headers()
+                return
+        m = re.match(r"^/reviews/(.+)\.review\.html$", path)
+        if m:  # regenerate the page fresh, with the current interview list in the sidebar
+            rj = _find_review_json(m.group(1))
+            if rj:
+                stem = rj.name[: -len(".review.json")]
+                try:
+                    review = json.loads(rj.read_text(encoding="utf-8"))
+                    interviews = [p.name[: -len(".review.json")] for p in _all_reviews()]
+                    write_html_report(review["audio"], review, REV / f"{stem}.review.html",
+                                      interviews=interviews)
+                except Exception as e:  # noqa: BLE001 — serve the existing file instead
+                    print(f"  (could not refresh page: {e})", flush=True)
+        super().do_GET()
 
     def do_POST(self):
         route = self.path.rstrip("/")
         try:
-            review = json.loads(Path(self.review_path).read_text(encoding="utf-8"))
+            stem, decisions = self._payload()
+            review = json.loads(self._review_for(stem).read_text(encoding="utf-8"))
             if route == "/save":
                 # autosave the current keep/drop/edit map next to the review (origin-independent)
-                decisions = self._body_decisions()
                 cp = _choices_path(review)
                 cp.write_text(json.dumps(decisions, ensure_ascii=False, indent=2), encoding="utf-8")
                 print(f"  saved {len(decisions)} choice(s) -> {cp.name}", flush=True)
                 self._json(200, {"ok": True, "saved": len(decisions)})
             elif route == "/apply":
-                decisions = self._body_decisions()
-                stem = Path(review["audio"]).stem
-                out = DIRS["final"] / (stem + ".corrected.docx")
-                changes = DIRS["changes"] / (stem + ".changes.docx")
+                out_stem = Path(review["audio"]).stem
+                out = DIRS["final"] / (out_stem + ".corrected.docx")
+                changes = DIRS["changes"] / (out_stem + ".changes.docx")
                 self._json(200, apply_decisions(review["base"], review, decisions, out,
                                                 changes_path=changes))
             else:
