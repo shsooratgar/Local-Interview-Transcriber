@@ -5,4 +5,4 @@
 cd "$(cd "$(dirname "$0")" && pwd)" || exit 1
 PYBIN="$HOME/miniconda3/envs/transcriber/bin/python"
 [ -x "$PYBIN" ] || PYBIN="python"
-exec "$PYBIN" src/serve_review.py "$@"
+exec "$PYBIN" src/serve_review.py --pick "$@"

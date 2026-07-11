@@ -123,16 +123,31 @@ def main():
     ap.add_argument("--port", type=int, default=None,
                     help=f"port to serve on (default: config review_port = {CFG.get('review_port', 8765)}). "
                          "Use a previous run's port to recover choices stranded in that origin's localStorage.")
+    ap.add_argument("--pick", action="store_true",
+                    help="when several interviews are processed, ask which one to open "
+                         "(Enter = most recent). review.command uses this.")
     args = ap.parse_args()
 
     if args.name:
         review_path = _resolve_review(args.name)
     else:
-        reviews = sorted(list(REV.glob("*.review.json")) + list(OUT.glob("*.review.json")),
-                         key=lambda p: p.stat().st_mtime, reverse=True)
+        seen, reviews = set(), []
+        for p in sorted(list(REV.glob("*.review.json")) + list(OUT.glob("*.review.json")),
+                        key=lambda p: p.stat().st_mtime, reverse=True):
+            if p.name not in seen:
+                seen.add(p.name)
+                reviews.append(p)
         if not reviews:
             raise SystemExit("No reviews in output/. Run the pipeline on a file first.")
         review_path = reviews[0]
+        if args.pick and len(reviews) > 1:
+            print("Which interview do you want to review?")
+            for i, p in enumerate(reviews, 1):
+                marker = "  (most recent)" if i == 1 else ""
+                print(f"  [{i}] {p.name.replace('.review.json', '')}{marker}")
+            choice = input("Number (just press Enter for the most recent): ").strip()
+            if choice.isdigit() and 1 <= int(choice) <= len(reviews):
+                review_path = reviews[int(choice) - 1]
 
     review = json.loads(review_path.read_text(encoding="utf-8"))
     html = write_html_report(review["audio"], review,
