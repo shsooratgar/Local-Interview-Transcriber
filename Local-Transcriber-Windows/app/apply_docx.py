@@ -61,13 +61,23 @@ def _rewrite(p, new_full):
         p.add_run(new_full)
 
 
-def _dedup_boundary(before, new, after):
-    """Drop a boundary word of `new` if it just repeats the adjacent transcript word."""
+def _dedup_boundary(before, new, after, max_overlap=4):
+    """Drop boundary words of `new` that just repeat the adjacent transcript words.
+    Handles MULTI-word overlaps: alignment fragments can end a suggestion with the
+    same 2-3 words the paragraph continues with; naive insertion would duplicate
+    them ("gives it action" + "it action We could…")."""
+    def norm(w):
+        return w.lower().strip(".,!?;:")
+
     nw, bw, aw = new.split(), before.split(), after.split()
-    if nw and aw and nw[-1].lower().strip(".,!?") == aw[0].lower().strip(".,!?"):
-        nw = nw[:-1]
-    if nw and bw and nw[0].lower().strip(".,!?") == bw[-1].lower().strip(".,!?"):
-        nw = nw[1:]
+    for k in range(min(max_overlap, len(nw), len(aw)), 0, -1):
+        if [norm(w) for w in nw[-k:]] == [norm(w) for w in aw[:k]]:
+            nw = nw[:-k]
+            break
+    for k in range(min(max_overlap, len(nw), len(bw)), 0, -1):
+        if [norm(w) for w in nw[:k]] == [norm(w) for w in bw[-k:]]:
+            nw = nw[k:]
+            break
     return " ".join(nw)
 
 

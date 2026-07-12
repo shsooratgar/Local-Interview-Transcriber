@@ -47,6 +47,36 @@ def _ctx(meta, lo, hi, n=CONTEXT_WORDS):
     }
 
 
+def _merge_fragments(ops, gap=2, max_span=50):
+    """Coalesce diff opcodes separated by tiny equal runs (<= gap tokens).
+    SequenceMatcher loves anchoring on little words ("it", "the") INSIDE a
+    genuinely changed/inserted phrase, which shreds one real difference into
+    overlapping fragments whose suggestions duplicate words when accepted.
+    max_span (base+audio tokens) stops chain-merging from building one
+    unreviewable mega-flag out of a long messy region."""
+    def coalesced(prev, op):
+        _, i1, _, j1, _ = prev
+        if (op[2] - i1) + (op[4] - j1) > max_span:
+            return None
+        tag = "insert" if i1 == op[2] else ("delete" if j1 == op[4] else "replace")
+        return (tag, i1, op[2], j1, op[4])
+
+    out = []
+    for op in ops:
+        new = None
+        if (op[0] != "equal" and len(out) >= 2 and out[-1][0] == "equal"
+                and out[-1][2] - out[-1][1] <= gap and out[-2][0] != "equal"):
+            new = coalesced(out[-2], op)
+            if new:
+                out.pop(), out.pop()
+        elif op[0] != "equal" and out and out[-1][0] != "equal":
+            new = coalesced(out[-1], op)
+            if new:
+                out.pop()
+        out.append(new if new else tuple(op))
+    return out
+
+
 def align(base_segments, our_words, omission_min=5, base_only_min=5):
     base_norm, base_meta = [], []
     for si, seg in enumerate(base_segments):
@@ -72,7 +102,7 @@ def align(base_segments, our_words, omission_min=5, base_only_min=5):
     flags = []
     base_conf = [None] * len(base_norm)
 
-    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+    for tag, i1, i2, j1, j2 in _merge_fragments(sm.get_opcodes()):
         if tag == "equal":
             for k in range(i2 - i1):
                 base_conf[i1 + k] = our_meta[j1 + k]["prob"]
