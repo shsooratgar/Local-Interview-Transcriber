@@ -308,7 +308,7 @@ def _apply_to_doc(base_docx, review, decisions, out_path, mark=False):
     paras = doc.paragraphs
     s2p = _seg_to_para(doc)
     marker = _Marker() if mark else None
-    counts = {"applied": 0, "skipped": 0}
+    counts = {"applied": 0, "skipped": 0, "skipped_rows": []}
 
     def rep_in(p, old, new):
         return marker.replace(p, old, new) if mark else _replace_in_para(p, old, new)
@@ -318,20 +318,27 @@ def _apply_to_doc(base_docx, review, decisions, out_path, mark=False):
             return True
         return any(rep_in(p, old, new) for p in paras)
 
-    def do_replace(flag, dec):
+    def note_skip(key, flag):
+        # tell the reviewer exactly WHICH row to fix by hand, not just how many
+        counts["skipped"] += 1
+        counts["skipped_rows"].append({"key": key, "time": flag.get("start")})
+
+    def do_replace(flag, dec, key):
         new = _final_text(flag, dec)
-        ok = bool(new) and rep_anywhere(flag.get("base_text", ""), new, flag.get("seg"))
-        counts["applied" if ok else "skipped"] += 1
+        if new and rep_anywhere(flag.get("base_text", ""), new, flag.get("seg")):
+            counts["applied"] += 1
+        else:
+            note_skip(key, flag)
 
     for i, d in enumerate(review.get("disagreements", [])):
         dec = decisions.get(f"c{i}")
         if dec and _accepted(dec):
-            do_replace(d, dec)
+            do_replace(d, dec, f"c{i}")
 
     for i, d in enumerate(review.get("recovered", [])):
         dec = decisions.get(f"r{i}")
         if dec and _accepted(dec):
-            do_replace(d, dec)
+            do_replace(d, dec, f"r{i}")
 
     for i, o in enumerate(review.get("omissions", [])):
         dec = decisions.get(f"o{i}")
@@ -348,7 +355,7 @@ def _apply_to_doc(base_docx, review, decisions, out_path, mark=False):
                 _insert_in_para(s2p[seg], text, o.get("base_ctx"))
             counts["applied"] += 1
         else:
-            counts["skipped"] += 1
+            note_skip(f"o{i}", o)
 
     # base_only: passage never heard in the audio — keep = remove it (or replace
     # with your typed override). Empty replacement is intentional here.
@@ -357,8 +364,10 @@ def _apply_to_doc(base_docx, review, decisions, out_path, mark=False):
         if not dec or not _accepted(dec):
             continue
         new = dec["e"].strip() if (dec.get("m") == "txt" and (dec.get("e") or "").strip()) else ""
-        ok = rep_anywhere(d.get("base_text", ""), new, d.get("seg"))
-        counts["applied" if ok else "skipped"] += 1
+        if rep_anywhere(d.get("base_text", ""), new, d.get("seg")):
+            counts["applied"] += 1
+        else:
+            note_skip(f"b{i}", d)
 
     if mark:
         marker.render()
