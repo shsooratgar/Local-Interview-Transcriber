@@ -44,7 +44,6 @@ TEMPLATE = """<!doctype html>
  .ts:hover{text-decoration:underline}
  .sug{color:#137a3e}
  .spk{color:#9a3412;font-size:11px;font-weight:600;white-space:nowrap}
- .care{color:#137a3e;font-size:11px;white-space:nowrap}
  .cf{font-variant-numeric:tabular-nums;color:#666;width:46px}
  .edit{width:170px;font-size:13px;padding:4px 6px;border:1px solid #cdd6e4;border-radius:6px}
  .dec{white-space:nowrap;width:112px}
@@ -163,13 +162,6 @@ def _dec():
             '<button onclick="mark(this,\'drop\')">drop</button></td>')
 
 
-def _care_badge(d):
-    """Small ✓ when the careful re-listen reproduced the audio version."""
-    if (d.get("careful") or {}).get("vote") == "audio":
-        return ' <span class="care">✓ re-listen</span>'
-    return ""
-
-
 def _suggest_row(key, d, badge=""):
     base = _esc(d.get("base_text"))
     sug = _esc((d.get("llm") or {}).get("correction") or d.get("audio_text"))
@@ -180,7 +172,7 @@ def _suggest_row(key, d, badge=""):
     return (f'<tr data-flag data-key="{key}" data-base="{base}" data-sug="{sug}">'
             f'{_time_cell(d.get("start"))}'
             f'<td>{_esc(d.get("speaker"))}</td><td class="bt">{in_tr}</td>'
-            f'<td class="at">{audio}{badge}{_care_badge(d)}</td><td class="cf">{conf}</td>'
+            f'<td class="at">{audio}{badge}</td><td class="cf">{conf}</td>'
             f'{_edit_cell()}{_dec()}</tr>')
 
 
@@ -253,7 +245,7 @@ def write_html_report(audio_path, review, out_path, interviews=None):
     for i, o in enumerate(review.get("omissions", [])):
         heard = _ctx_html(o.get("audio_ctx"), o.get("audio_text"))
         om += (f'<tr data-flag data-key="o{i}" data-base="[omission]" data-sug="{_esc(o.get("audio_text"))}">'
-               f'{_time_cell(o.get("start"))}<td class="at">{heard}{_care_badge(o)}</td>{_edit_cell()}{_dec()}</tr>')
+               f'{_time_cell(o.get("start"))}<td class="at">{heard}</td>{_edit_cell()}{_dec()}</tr>')
     om = om or '<tr><td colspan="4">None found.</td></tr>'
 
     bo = ""
