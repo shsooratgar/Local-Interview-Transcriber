@@ -49,13 +49,10 @@ Respond with ONLY this JSON: {{"summary": "one factual sentence on what was actu
 
 
 def _ollama(prompt, model, url, num_ctx=8192):
-    r = requests.post(
-        f"{url}/api/generate",
-        json={"model": model, "prompt": prompt, "stream": False, "format": "json",
-              "options": {"temperature": 0.0, "num_ctx": num_ctx, "num_predict": 1024}},
-        timeout=300,
-    )
-    r.raise_for_status()
+    from llm_review import _post_generate  # patient timeout + keep_alive + retry
+    r = _post_generate({"model": model, "prompt": prompt, "stream": False, "format": "json",
+                        "options": {"temperature": 0.0, "num_ctx": num_ctx, "num_predict": 1024}},
+                       url)
     try:
         return json.loads(r.json().get("response", "{}"))
     except json.JSONDecodeError:

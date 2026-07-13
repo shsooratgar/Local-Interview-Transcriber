@@ -68,6 +68,25 @@ def ensure_llm_ready(model, ollama_url):
             f"    (or in a terminal:  ollama pull {model})")
 
 
+def _post_generate(body, ollama_url, timeout=600):
+    """One LLM call, tolerant of slow CPU laptops. Ollama unloads an idle model
+    after ~5 min — and our re-listen phases take longer than that — so the next
+    call pays a multi-minute model reload; a tight timeout then kills a healthy
+    run (field incident: ReadTimeout at 180s ended a full-morning run at the
+    recovered-passages step). keep_alive pins the model between calls, the
+    timeout allows a reload, and one retry covers a residual stall."""
+    body = {**body, "keep_alive": "2h"}
+    for attempt in (1, 2):
+        try:
+            r = requests.post(f"{ollama_url}/api/generate", json=body, timeout=timeout)
+            r.raise_for_status()
+            return r
+        except requests.Timeout:
+            if attempt == 2:
+                raise
+            print("  (the language model is answering very slowly - retrying once...)", flush=True)
+
+
 PROMPT = """An automatic speech recognizer produced this transcript passage. The part wrapped in
 >>> <<< had low confidence and may be misheard. The text may be English or German — do not translate.
 
@@ -102,13 +121,8 @@ def review_span(span_text, context_text, glossary_terms, model, ollama_url):
     glossary = ", ".join(glossary_terms[:60]) if glossary_terms else "(none provided)"
     prompt = PROMPT.format(glossary=glossary, context_marked=marked)
 
-    r = requests.post(
-        f"{ollama_url}/api/generate",
-        json={"model": model, "prompt": prompt, "stream": False,
-              "format": "json", "options": {"temperature": 0.0}},
-        timeout=180,
-    )
-    r.raise_for_status()
+    r = _post_generate({"model": model, "prompt": prompt, "stream": False,
+                        "format": "json", "options": {"temperature": 0.0}}, ollama_url)
     resp = r.json().get("response", "{}")
     try:
         verdict = json.loads(resp)
@@ -160,13 +174,8 @@ def review_disagreement(base_text, audio_text, context_text, model, ollama_url, 
     glossary = ", ".join((glossary_terms or [])[:60]) or "(none provided)"
     prompt = DISAGREE_PROMPT.format(base_text=base_text, audio_text=audio_text,
                                     context_marked=marked, glossary=glossary)
-    r = requests.post(
-        f"{ollama_url}/api/generate",
-        json={"model": model, "prompt": prompt, "stream": False,
-              "format": "json", "options": {"temperature": 0.0}},
-        timeout=180,
-    )
-    r.raise_for_status()
+    r = _post_generate({"model": model, "prompt": prompt, "stream": False,
+                        "format": "json", "options": {"temperature": 0.0}}, ollama_url)
     try:
         verdict = json.loads(r.json().get("response", "{}"))
     except json.JSONDecodeError:
@@ -211,13 +220,8 @@ def review_recovered(base_text, audio_text, context_text, model, ollama_url):
     else:
         marked = f"{context_text}\n\n[Spot]: >>> {base_text} <<<"
     prompt = RECOVERED_PROMPT.format(base_text=base_text, audio_text=audio_text, context_marked=marked)
-    r = requests.post(
-        f"{ollama_url}/api/generate",
-        json={"model": model, "prompt": prompt, "stream": False,
-              "format": "json", "options": {"temperature": 0.0}},
-        timeout=180,
-    )
-    r.raise_for_status()
+    r = _post_generate({"model": model, "prompt": prompt, "stream": False,
+                        "format": "json", "options": {"temperature": 0.0}}, ollama_url)
     try:
         verdict = json.loads(r.json().get("response", "{}"))
     except json.JSONDecodeError:
