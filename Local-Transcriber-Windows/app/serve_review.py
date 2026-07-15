@@ -106,6 +106,76 @@ def _interview_status(rj):
 
 class Handler(SimpleHTTPRequestHandler):
     review_path = None
+    _range = None  # (first, last) byte offsets of the current partial request
+
+    # ---- HTTP Range support: without it the browser CANNOT jump to a timestamp.
+    # Python's file server ignores Range and always returns the whole file from
+    # byte 0, so every ▶ click restarted the audio from the beginning (it only
+    # seemed to work when the whole mp3 happened to be buffered already).
+
+    def end_headers(self):
+        if self.command == "GET":
+            self.send_header("Accept-Ranges", "bytes")  # advertise seeking
+        super().end_headers()
+
+    def _parse_range(self, size):
+        """'bytes=123-' / 'bytes=123-456' -> (first, last) clamped to the file."""
+        header = self.headers.get("Range")
+        if not header:
+            return None
+        m = re.fullmatch(r"bytes=(\d*)-(\d*)", header.strip())
+        if not m or not (m.group(1) or m.group(2)):
+            return None
+        if m.group(1):
+            first = int(m.group(1))
+            last = int(m.group(2)) if m.group(2) else size - 1
+        else:  # suffix form: last N bytes
+            first, last = max(0, size - int(m.group(2))), size - 1
+        return (first, min(last, size - 1)) if first < size else "unsatisfiable"
+
+    def send_head(self):
+        self._range = None
+        if "Range" not in self.headers:
+            return super().send_head()
+        path = Path(self.translate_path(self.path))
+        if not path.is_file():
+            return super().send_head()  # let the parent 404/redirect as usual
+        size = path.stat().st_size
+        rng = self._parse_range(size)
+        if rng is None:
+            return super().send_head()
+        if rng == "unsatisfiable":
+            self.send_response(416)
+            self.send_header("Content-Range", f"bytes */{size}")
+            self.end_headers()
+            return None
+        first, last = rng
+        try:
+            f = path.open("rb")
+        except OSError:
+            self.send_error(404)
+            return None
+        self._range = (first, last)
+        self.send_response(206)
+        self.send_header("Content-Type", self.guess_type(str(path)))
+        self.send_header("Content-Range", f"bytes {first}-{last}/{size}")
+        self.send_header("Content-Length", str(last - first + 1))
+        self.send_header("Last-Modified", self.date_time_string(path.stat().st_mtime))
+        self.end_headers()
+        return f
+
+    def copyfile(self, source, outputfile):
+        if not self._range:
+            return super().copyfile(source, outputfile)
+        first, last = self._range
+        source.seek(first)
+        remaining = last - first + 1
+        while remaining > 0:
+            chunk = source.read(min(64 * 1024, remaining))
+            if not chunk:
+                break
+            outputfile.write(chunk)
+            remaining -= len(chunk)
 
     def _json(self, status, payload):
         body = json.dumps(payload).encode()
