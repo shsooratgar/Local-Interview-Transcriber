@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 from pathlib import Path
 
 import requests
@@ -83,70 +82,6 @@ def summarize_text(text, model, url):
     final = _ollama(REDUCE_PROMPT.format(bullets=bullets), model, url)
     return {"summary": final.get("summary", ""),
             "topics": final.get("topics") or topics}
-
-
-# ---------- key quotes (verbatim, code-guarded) ----------
-
-QUOTE_PROMPT = """Below is PART of an interview transcript (speaker label before each turn; English or German).
-
-Select up to 3 KEY QUOTES — statements that are insightful, decisive, or characteristic of the discussion.
-Rules:
-- Copy each quote EXACTLY, word for word, from ONE single turn. Do NOT paraphrase, translate,
-  shorten with "...", fix grammar, or merge text from different turns.
-- Prefer complete sentences of roughly 8-40 words. Keep the original language.
-- Skip greetings, small talk, and logistics. If nothing stands out, return an empty list.
-
-Transcript part:
-{chunk}
-
-Respond with ONLY this JSON: {{"quotes": [{{"quote": "...", "impact": 1-10}}]}}"""
-
-_QWORD = re.compile(r"\w+", re.UNICODE)
-
-
-def _qtokens(text):
-    return [t.lower() for t in _QWORD.findall(text or "")]
-
-
-def _locate_quote(segments, quote):
-    """Return the index of the single segment that contains the quote word-for-word
-    (punctuation/case-insensitive), or None — the guard against paraphrased quotes."""
-    q = _qtokens(quote)
-    if len(q) < 4:
-        return None
-    for i, s in enumerate(segments):
-        toks = _qtokens(s.get("text"))
-        if len(toks) < len(q):
-            continue
-        for j in range(len(toks) - len(q) + 1):
-            if toks[j:j + len(q)] == q:
-                return i
-    return None
-
-
-def suggest_quotes(segments, model, url, max_quotes=6):
-    """Suggest verbatim key quotes. Every candidate is verified word-for-word
-    against a single speaker turn; anything the LLM reworded is dropped."""
-    lines = [f"{s.get('speaker') or '??'}: {s['text']}" for s in segments if s.get("text")]
-    candidates = []
-    for ch in _chunks(" \n".join(lines)):
-        for c in _ollama(QUOTE_PROMPT.format(chunk=ch), model, url).get("quotes", []):
-            if isinstance(c, dict) and c.get("quote"):
-                candidates.append(c)
-    out, seen = [], set()
-    candidates.sort(key=lambda c: c.get("impact") or 0, reverse=True)
-    for c in candidates:
-        seg = _locate_quote(segments, c["quote"])
-        key = " ".join(_qtokens(c["quote"]))
-        if seg is None or key in seen:
-            continue
-        seen.add(key)
-        out.append({"quote": c["quote"].strip(), "speaker": segments[seg].get("speaker"),
-                    "seg": seg, "impact": c.get("impact")})
-        if len(out) >= max_quotes:
-            break
-    out.sort(key=lambda q: q["seg"])  # transcript order
-    return out
 
 
 def _text_from(path):

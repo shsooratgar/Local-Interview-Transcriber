@@ -25,7 +25,7 @@ from align import align, words_from_whisper
 from common import load_config, load_glossary, out_dirs
 from flag import find_suspects
 from llm_review import ensure_llm_ready, review_disagreement, review_recovered, review_span
-from summarize import suggest_quotes, summarize_text
+from summarize import summarize_text
 from transcribe import cached_transcribe, transcribe_clip
 from transcript_io import load_base
 
@@ -313,10 +313,8 @@ def review_with_base(audio, base_path, cfg, do_summary=True):
         print("Summarizing…", flush=True)
         base_text = " ".join(s["text"] for s in base["segments"])
         summary = summarize_text(base_text, cfg["llm_model"], cfg["ollama_url"])
-        print("Selecting key quotes…", flush=True)
-        quotes = suggest_quotes(base["segments"], cfg["llm_model"], cfg["ollama_url"])
     else:
-        summary, quotes = {"summary": "", "topics": []}, []
+        summary = {"summary": "", "topics": []}
 
     participants = []
     for s in base["segments"]:
@@ -329,7 +327,7 @@ def review_with_base(audio, base_path, cfg, do_summary=True):
         "match_coverage": al["match_coverage"],
         "duration_seconds": transcript.get("duration"),
         "participants": participants,
-        "summary": summary, "quotes": quotes, "disagreements": disagreements,
+        "summary": summary, "disagreements": disagreements,
         "omissions": omissions, "overlaps": overlaps, "recovered": recovered,
         "base_only": base_only,
     }
@@ -366,7 +364,7 @@ def main():
         print(f"corrections: {len(review['disagreements'])}  omissions: {len(review['omissions'])}  "
               f"overlaps: {len(review['overlaps'])}  not-heard: {len(review['base_only'])}  "
               f"match_coverage: {review['match_coverage']}")
-        print(f"summary topics: {len(review['summary']['topics'])}  key quotes: {len(review['quotes'])}")
+        print(f"summary topics: {len(review['summary']['topics'])}")
         print(f"saved -> {out}")
         print(f"        {out.with_suffix('.html')}   ({time.time() - t0:.0f}s)")
         return

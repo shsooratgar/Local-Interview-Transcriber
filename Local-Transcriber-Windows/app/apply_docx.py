@@ -219,8 +219,15 @@ def _seg_to_para(doc):
 
 # ---------- header table on the final document ----------
 
+# Rows we CREATE and fill. "Key quotes" was dropped on request (2026-07-16):
+# we no longer add or fill it.
 _HEADER_ROWS = ["Meeting title", "Date", "Duration", "Participants",
-                "Summary", "Reflections", "Key quotes"]
+                "Summary", "Reflections"]
+
+# Labels we RECOGNIZE when deciding "is this the meta table?" — a superset, so a
+# transcript whose template still has a Key quotes row is reused (and that row
+# left untouched) instead of getting a second table added above it.
+_KNOWN_LABELS = _HEADER_ROWS + ["Key quotes"]
 
 
 def _fmt_duration(sec):
@@ -257,15 +264,15 @@ def _set_cell_lines(cell, lines):
 
 def _ensure_header_table(doc, review):
     """Make sure the document starts with the meta table (Meeting title / Date /
-    Duration / Participants / Summary / Reflections / Key quotes) and fill in
+    Duration / Participants / Summary / Reflections) and fill in
     what we know — ONLY into empty cells; existing entries are never touched."""
-    labels_lc = [h.lower() for h in _HEADER_ROWS]
+    labels_lc = [h.lower() for h in _KNOWN_LABELS]
 
     def label_key(text):
         t = (text or "").strip().lower().rstrip(":")
         for i, lab in enumerate(labels_lc):
             if t.startswith(lab) or lab.startswith(t) and t:
-                return _HEADER_ROWS[i]
+                return _KNOWN_LABELS[i]
         return None
 
     table = None
@@ -301,8 +308,6 @@ def _ensure_header_table(doc, review):
         "Participants": [", ".join(review.get("participants") or [])],
         "Summary": ([summ.get("summary")] if summ.get("summary") else [])
                    + [f"• {t}" for t in (summ.get("topics") or [])],
-        "Key quotes": [f"„{q['quote']}“ — {q.get('speaker') or '??'}"
-                       for q in (review.get("quotes") or [])],
     }
     for key, lines in values.items():
         lines = [ln for ln in lines if ln]
