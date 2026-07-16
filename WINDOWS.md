@@ -216,10 +216,12 @@ them, walk every parenthesis and variable expansion by hand.
 
 ## 9. Known gaps / future work
 
-- `batch.py` ships in the bundle but has **no .bat launcher** — Windows users
-  process one file at a time by design. If collaborators ever need batch,
-  add a `3 - PROCESS ALL.bat` mirroring PROCESS.bat and think about runtime
-  (days, on CPU).
+- ~~`batch.py` ships in the bundle but has no .bat launcher~~ — added 2026-07-16
+  as `3 - PROCESS ALL (batch).bat`: shows the pairing via `--dry-run`, asks for
+  confirmation (multi-hour CPU runs!), processes everything with resume-skip,
+  writes `output\data_log.xlsx`, then starts the review server. Accepts a
+  dragged-on folder as argument. Mind the runtime on CPU: a handful of
+  one-hour interviews is an overnight-to-days job.
 - `check_setup.py` (Mac toolchain checker) has no Windows counterpart; SETUP's
   own error branches are the current equivalent.
 - The zip is a committed binary artifact; if the repo ever goes properly

@@ -53,6 +53,16 @@ IMPORTANT
   - Everything stays on this computer. Nothing is sent online.
 
 
+PROCESSING MANY FILES AT ONCE (optional)
+  Put SEVERAL audio files in "audio" and their transcripts in "transcripts"
+  (matching names, e.g. interview01 for both), then double-click
+  "3 - PROCESS ALL (batch)". It shows how it paired the files and asks
+  before starting -- a batch can run for MANY hours, so plugged in and
+  sleep set to Never is a must. Already-processed files are skipped, so
+  you can stop and re-run it anytime. When it finishes, the review page
+  opens with a list on the left to switch between interviews.
+
+
 IF SOMETHING LOOKS WRONG
   - Yellow "Warning" or "UserWarning" text scrolling by:  NORMAL, ignore it.
   - Window shows nothing new for a long time on the first run:  it is
