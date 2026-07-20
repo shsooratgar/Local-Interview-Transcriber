@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from pathlib import Path
 
 from docx import Document
@@ -239,6 +240,21 @@ def _fmt_duration(sec):
     return f"{h}:{m:02d}:{s:02d} h" if h else f"{m}:{s:02d} min"
 
 
+def _audio_duration(review):
+    """Duration in seconds — from the review (Whisper's measure of the audio),
+    or probed straight from the audio file when an older review lacks it."""
+    if review.get("duration_seconds"):
+        return review["duration_seconds"]
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-show_entries", "format=duration",
+             "-of", "csv=p=0", str(review.get("audio", ""))],
+            capture_output=True, text=True, timeout=30)
+        return float(out.stdout.strip())
+    except Exception:  # noqa: BLE001 — no audio at hand: leave the cell empty
+        return None
+
+
 def _title_date_from_name(audio_path):
     """'250131_Team Meeting.m4a' -> ('Team Meeting', '31.01.2025')."""
     stem = Path(audio_path).stem
@@ -288,6 +304,13 @@ def _ensure_header_table(doc, review):
             pass
         doc.element.body.insert(0, table._element)  # move to the very top
 
+    # Some templates have ONE combined "Date/ duration" row: split it.
+    # That row becomes "Date" (whatever was written in it stays untouched) and
+    # "Duration" gets its own row right below, filled from the audio length.
+    for r in table.rows:
+        if re.fullmatch(r"date\s*/\s*duration:?", (r.cells[0].text or "").strip(), re.I):
+            r.cells[0].text = "Date"
+
     rows = {}
     for r in table.rows:
         k = label_key(r.cells[0].text)
@@ -298,16 +321,17 @@ def _ensure_header_table(doc, review):
             r = table.add_row()
             r.cells[0].text = h
             rows[h] = r
+    if "Date" in rows and "Duration" in rows:  # keep them adjacent, Date first
+        rows["Date"]._tr.addnext(rows["Duration"]._tr)
 
     title, date = _title_date_from_name(review.get("audio", ""))
-    summ = review.get("summary") or {}
+    # NB: the "Summary" row is created but NEVER filled — summaries are written
+    # by hand now (2026-07-20); existing summary text is never touched either.
     values = {
         "Meeting title": [title] if title else [],
         "Date": [date] if date else [],
-        "Duration": [_fmt_duration(review.get("duration_seconds"))],
+        "Duration": [_fmt_duration(_audio_duration(review))],
         "Participants": [", ".join(review.get("participants") or [])],
-        "Summary": ([summ.get("summary")] if summ.get("summary") else [])
-                   + [f"• {t}" for t in (summ.get("topics") or [])],
     }
     for key, lines in values.items():
         lines = [ln for ln in lines if ln]

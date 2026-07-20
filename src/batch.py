@@ -119,7 +119,6 @@ def main():
                     help="folder to scan recursively (default: audio_dir + transcript_dir)")
     ap.add_argument("--force", action="store_true", help="re-process even if a review exists")
     ap.add_argument("--dry-run", action="store_true", help="only show the pairing")
-    ap.add_argument("--no-summary", action="store_true")
     args = ap.parse_args()
 
     cfg = load_config()
@@ -150,7 +149,7 @@ def main():
         else:
             t0 = time.time()
             try:
-                review = process_one(str(audio), str(base), cfg, do_summary=not args.no_summary)
+                review = process_one(str(audio), str(base), cfg)
             except Exception as e:  # noqa: BLE001 — one bad file must not kill the night run
                 print(f"  FAILED: {e}")
                 failed.append(audio.name)

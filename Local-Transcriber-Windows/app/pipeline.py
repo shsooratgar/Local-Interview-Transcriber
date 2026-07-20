@@ -6,7 +6,7 @@ Two modes:
         python src/pipeline.py audio.wav
   * Option A (annotate an existing noScribe transcript):
         python src/pipeline.py audio.m4a --base transcript.docx
-    -> re-transcribe -> align by text -> adjudicate disagreements -> summarize
+    -> re-transcribe -> align by text -> adjudicate disagreements
     -> write output/<stem>.review.docx (original transcript untouched, additions only)
 """
 from __future__ import annotations
@@ -25,14 +25,13 @@ from align import align, words_from_whisper
 from common import load_config, load_glossary, out_dirs
 from flag import find_suspects
 from llm_review import ensure_llm_ready, review_disagreement, review_recovered, review_span
-from summarize import summarize_text
 from transcribe import cached_transcribe, transcribe_clip
 from transcript_io import load_base
 
 
 # ---------- confidence-only mode ----------
 
-def review_file(audio, cfg, max_flags=None, do_summary=True):
+def review_file(audio, cfg, max_flags=None):
     transcript, _ = cached_transcribe(audio, cfg)
     suspects = find_suspects(transcript, cfg["low_confidence_threshold"],
                              cfg["min_segment_gap_seconds"], cfg["context_window_seconds"])
@@ -40,13 +39,11 @@ def review_file(audio, cfg, max_flags=None, do_summary=True):
     todo = suspects[:max_flags] if max_flags else suspects
     reviewed = [{**sp, "llm": review_span(sp["text"], sp.get("context", ""), terms,
                                           cfg["llm_model"], cfg["ollama_url"])} for sp in todo]
-    summary = summarize_text(transcript["text"], cfg["llm_model"], cfg["ollama_url"]) \
-        if do_summary else {"summary": "", "topics": []}
     result = {
         "audio": str(audio), "language": transcript.get("language"),
         "n_flags_raw": len(suspects), "n_flags_reviewed": len(reviewed),
         "n_real_errors": sum(1 for r in reviewed if r["llm"].get("is_error")),
-        "summary": summary, "flags": reviewed,
+        "flags": reviewed,
     }
     out = out_dirs(cfg)["reviews"] / (Path(audio).stem + ".review.json")
     out.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -215,7 +212,7 @@ def _careful_check(audio, flags, cfg, cache, kind, cache_path=None):
     return kept
 
 
-def review_with_base(audio, base_path, cfg, do_summary=True):
+def review_with_base(audio, base_path, cfg):
     print("Re-transcribing (or loading cache)…", flush=True)
     transcript, _ = cached_transcribe(audio, cfg)
     base = load_base(base_path)
@@ -309,13 +306,6 @@ def review_with_base(audio, base_path, cfg, do_summary=True):
     if care_cache:
         care_path.write_text(json.dumps(care_cache, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    if do_summary:
-        print("Summarizing…", flush=True)
-        base_text = " ".join(s["text"] for s in base["segments"])
-        summary = summarize_text(base_text, cfg["llm_model"], cfg["ollama_url"])
-    else:
-        summary = {"summary": "", "topics": []}
-
     participants = []
     for s in base["segments"]:
         spk = s.get("speaker")
@@ -327,18 +317,18 @@ def review_with_base(audio, base_path, cfg, do_summary=True):
         "match_coverage": al["match_coverage"],
         "duration_seconds": transcript.get("duration"),
         "participants": participants,
-        "summary": summary, "disagreements": disagreements,
+        "disagreements": disagreements,
         "omissions": omissions, "overlaps": overlaps, "recovered": recovered,
         "base_only": base_only,
     }
 
 
-def process_one(audio, base_path, cfg, do_summary=True):
+def process_one(audio, base_path, cfg):
     """Full Option-A run for one file: review + all three report files.
     Returns the review dict (also used by the batch runner)."""
     from report_docx import write_docx_report
     from report_html import write_html_report
-    review = review_with_base(audio, base_path, cfg, do_summary=do_summary)
+    review = review_with_base(audio, base_path, cfg)
     out = out_dirs(cfg)["reviews"] / (Path(audio).stem + ".review.docx")
     write_docx_report(base_path, review, out)
     write_html_report(audio, review, out.with_suffix(".html"))
@@ -351,7 +341,6 @@ def main():
     ap.add_argument("audio")
     ap.add_argument("--base", default=None, help="existing noScribe .docx transcript (Option A)")
     ap.add_argument("--max-flags", type=int, default=None, help="cap LLM calls (confidence mode)")
-    ap.add_argument("--no-summary", action="store_true")
     args = ap.parse_args()
 
     cfg = load_config()
@@ -359,20 +348,18 @@ def main():
     t0 = time.time()
 
     if args.base:
-        review = process_one(args.audio, args.base, cfg, do_summary=not args.no_summary)
+        review = process_one(args.audio, args.base, cfg)
         out = out_dirs(cfg)["reviews"] / (Path(args.audio).stem + ".review.docx")
         print(f"corrections: {len(review['disagreements'])}  omissions: {len(review['omissions'])}  "
               f"overlaps: {len(review['overlaps'])}  not-heard: {len(review['base_only'])}  "
               f"match_coverage: {review['match_coverage']}")
-        print(f"summary topics: {len(review['summary']['topics'])}")
         print(f"saved -> {out}")
         print(f"        {out.with_suffix('.html')}   ({time.time() - t0:.0f}s)")
         return
 
-    result, out = review_file(args.audio, cfg, args.max_flags, do_summary=not args.no_summary)
+    result, out = review_file(args.audio, cfg, args.max_flags)
     print(f"flags: {result['n_flags_raw']} raw -> reviewed {result['n_flags_reviewed']} "
           f"-> LLM kept {result['n_real_errors']} as real errors")
-    print(f"summary: {len(result['summary'].get('topics', []))} topics")
     print(f"saved -> {out}   ({time.time() - t0:.0f}s)")
 
 

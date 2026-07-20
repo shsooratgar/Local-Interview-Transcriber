@@ -28,18 +28,6 @@ def _fill_cell_bullets(cell, items):
         cell.add_paragraph("• " + it)
 
 
-def _add_summary_row(doc, topics):
-    if not doc.tables:
-        doc.add_heading("LLM Summary", level=2)
-        for t in topics:
-            doc.add_paragraph("• " + t)
-        return
-    table = doc.tables[0]
-    row = table.add_row()
-    row.cells[0].text = "LLM Summary"
-    _fill_cell_bullets(row.cells[min(1, len(row.cells) - 1)], topics)
-
-
 def _grid(doc, headers, widths=None):
     t = doc.add_table(rows=1, cols=len(headers))
     try:
@@ -56,13 +44,8 @@ def _grid(doc, headers, widths=None):
 
 def write_docx_report(base_docx, review, out_path):
     doc = Document(str(base_docx))
-    summary = review.get("summary", {}) or {}
-    _add_summary_row(doc, summary.get("topics", []))
-
     doc.add_page_break()
     doc.add_heading("LLM review — automatic suggestions, please verify", level=1)
-    if summary.get("summary"):
-        doc.add_paragraph(summary["summary"])
     doc.add_paragraph(f"(transcript/audio match coverage: {review.get('match_coverage', '?')}. "
                       f"Times refer to the audio; use the .html viewer to hear each one.)")
 

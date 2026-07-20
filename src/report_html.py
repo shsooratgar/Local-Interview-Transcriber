@@ -83,9 +83,6 @@ TEMPLATE = """<!doctype html>
 </header>
 <main>
  <p class="note">Hit ▶ (or click the blue time) to hear that moment — playback starts ~5s earlier. For each row, click <b>keep</b>/<b>drop</b> OR type your own in <b>your correction</b> — whichever you touch last wins; the other greys out (still clickable to switch). "conf" is how sure our re-transcription was. Choices are saved in this browser. "Apply" writes a corrected .docx; nothing else changes your transcript file.</p>
- <h2>Summary</h2>
- <p>__SUMMARY__</p>
- <ul>__TOPICS__</ul>
  <h2>Suggested corrections</h2>
  <div class="bar"><span id="tally">…</span><button onclick="applyChanges()">Apply → corrected .docx</button><button class="alt" onclick="copyAccepted()">Copy accepted</button><button class="alt" onclick="resetState()">Reset choices</button><span id="saved" style="font-size:12px;margin-left:auto"></span></div>
  <table><tr><th class="t">time</th><th>speaker</th><th>in transcript</th><th>suggested (from audio)</th><th class="cf">conf</th><th>your correction</th><th></th></tr>__CORR__</table>
@@ -227,7 +224,6 @@ def write_html_report(audio_path, review, out_path, interviews=None):
     audio_rel = _web_audio_src(audio_path, out_path.parent)
     # durable choices store served statically next to this report (origin-independent)
     choices_rel = quote(Path(audio_path).stem + ".choices.json")
-    summ = review.get("summary", {}) or {}
     stem = Path(audio_path).stem
     sidebar = _sidebar_html(interviews, stem) if interviews and len(interviews) > 1 else ""
 
@@ -256,7 +252,6 @@ def write_html_report(audio_path, review, out_path, interviews=None):
                f'<td class="bt">{in_tr}</td>{_edit_cell()}{_dec()}</tr>')
     bo = bo or '<tr><td colspan="5">None found.</td></tr>'
 
-    topics = "".join(f"<li>{_esc(t)}</li>" for t in summ.get("topics", []))
     pills = (f'<span class="pill">match {_esc(review.get("match_coverage"))}</span>'
              f'<span class="pill">{len(review.get("disagreements", []))} corrections</span>'
              f'<span class="pill">{len(review.get("recovered", []))} recovered</span>'
@@ -270,8 +265,6 @@ def write_html_report(audio_path, review, out_path, interviews=None):
            .replace("__PILLS__", pills)
            .replace("__AUDIO__", audio_rel)
            .replace("__CHOICES__", choices_rel)
-           .replace("__SUMMARY__", _esc(summ.get("summary")))
-           .replace("__TOPICS__", topics)
            .replace("__CORR__", corr)
            .replace("__REC__", rec)
            .replace("__OM__", om)
