@@ -212,6 +212,7 @@ them, walk every parenthesis and variable expansion by hand.
 | Run vanished overnight, no `[X]` | Windows sleep | power settings → sleep Never; re-run |
 | `404 Not Found … /api/generate` | LLM model missing from the Ollama store (July 2026: cost a full CPU run) | pipeline now verifies + auto-pulls the model at START (`ensure_llm_ready`); manual: `ollama pull <llm_model>` |
 | Crash at "reviewing" stage (other) | Ollama service died mid-run / model name mismatch with SETUP pull | launcher preflight starts the service; keep `llm_model` == SETUP's pull; transcription + re-listen caches survive (saved incrementally), so a re-run resumes in minutes |
+| `mkl_malloc: failed to allocate memory` at Whisper model load (start of a run) | back-to-back runs: keep_alive=2h pins the 7B model in RAM, no room left for large-v3 on 8-16GB laptops (July 2026 field incident) | fixed: `unload_llm` frees the model before the transcription phase and after each file; immediate workaround = restart the laptop, run again |
 | Everything extremely slow | 8 GB RAM: large-v3 (~3 GB) + qwen 7b (~4.5 GB) contend | `whisper_model_faster: medium` in config.yaml |
 
 ## 9. Known gaps / future work
@@ -229,4 +230,24 @@ them, walk every parenthesis and variable expansion by hand.
 - Speaker verification by voice (pyannote) is a promised future feature
   (README status) — if added, remember the bundle user has no GPU and no
   HF account; it likely stays Mac-only, which is fine: the Mac side produces,
-  Windows side reviews.
+  Windows side reviews. NB speaker labels are per-file (noScribe re-diarizes
+  each recording; S01 in one file ≠ S01 in another), so cross-file voiceprint
+  enrollment would be needed to recognize recurring participants.
+- Teams/`.vtt` transcripts are NOT processable: transcript_io *reads* vtt, but
+  the pipeline opens the base as a .docx at the report/apply step and crashes.
+  Supporting them = a Teams-format detector in transcript_io + format-aware
+  paragraph mapping in apply_docx. Deferred.
+
+## 10. Project status (2026-07-21)
+
+**Winding down.** The collaboration concluded: the tool works and saved real
+time, but a tool-corrected transcript still needs a full human re-listen for
+speaker attribution, so the researcher took review back in-house. If this repo is
+ever published: (a) it's the tool only, no data; (b) scrub this file and the
+README first — both contain institution names and usernames in the
+field-incident write-ups; (c) confirm `.gitignore` still excludes `data/`,
+`output/`, `Audios/`, `Experiment/`, `glossary/*.txt` (not the `.example`).
+The removed-features list matters for anyone extending it: **summaries and key
+quotes were deliberately removed** — don't resurrect them. See the project
+memory for the full arc and the accuracy reality (residual errors concentrate
+in domain vocab + proper nouns + speaker attribution).
