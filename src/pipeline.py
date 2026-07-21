@@ -24,7 +24,7 @@ from tqdm import tqdm
 from align import align, words_from_whisper
 from common import load_config, load_glossary, out_dirs
 from flag import find_suspects
-from llm_review import ensure_llm_ready, review_disagreement, review_recovered, review_span
+from llm_review import ensure_llm_ready, review_disagreement, review_recovered, review_span, unload_llm
 from transcribe import cached_transcribe, transcribe_clip
 from transcript_io import load_base
 
@@ -333,6 +333,7 @@ def process_one(audio, base_path, cfg):
     write_docx_report(base_path, review, out)
     write_html_report(audio, review, out.with_suffix(".html"))
     out.with_suffix(".json").write_text(json.dumps(review, ensure_ascii=False, indent=2), encoding="utf-8")
+    unload_llm(cfg["ollama_url"])  # free the LLM's RAM so the NEXT run's Whisper load fits
     return review
 
 

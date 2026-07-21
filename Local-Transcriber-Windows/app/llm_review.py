@@ -36,6 +36,7 @@ def ensure_llm_ready(model, ollama_url):
             f"    ({e})\n"
             "    Start Ollama (or re-run the setup) and try again.")
     if model in names or f"{model}:latest" in names:
+        unload_llm(ollama_url)  # free RAM for the transcription phase ahead
         return
     print(f"AI model '{model}' is not downloaded yet — fetching it now (one time)…", flush=True)
     try:
@@ -66,6 +67,25 @@ def ensure_llm_ready(model, ollama_url):
             f"    ({e})\n"
             f"    Check the internet connection, then run the setup again\n"
             f"    (or in a terminal:  ollama pull {model})")
+
+
+def unload_llm(ollama_url):
+    """Ask Ollama to release any loaded model's RAM. On 8-16GB laptops the
+    resident 7B model (pinned by keep_alive) plus Whisper large-v3 do not fit
+    together — a field run died at model load with 'mkl_malloc: failed to
+    allocate memory'. Called before the memory-heavy transcription phase and
+    after a file completes; the next review call reloads the model, which
+    _post_generate's patient timeout absorbs. Best-effort: never raises."""
+    try:
+        r = requests.get(f"{ollama_url}/api/ps", timeout=5)
+        for m in r.json().get("models", []):
+            name = m.get("name") or m.get("model")
+            if name:
+                requests.post(f"{ollama_url}/api/generate",
+                              json={"model": name, "prompt": "", "keep_alive": 0},
+                              timeout=30)
+    except Exception:  # noqa: BLE001 — old Ollama without /api/ps etc.
+        pass
 
 
 def _post_generate(body, ollama_url, timeout=600):
