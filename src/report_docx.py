@@ -12,6 +12,23 @@ from __future__ import annotations
 from pathlib import Path
 
 from docx import Document
+from docx.shared import Pt
+
+
+def _heading(doc, text, level=1):
+    """Add a heading WITHOUT depending on the built-in 'Heading N' styles.
+    Some transcript .docx files (e.g. certain Word exports) ship with those
+    styles stripped, and `doc.add_heading` then raises
+    KeyError: "no style with name 'Heading 1'". Fall back to a bold, sized
+    paragraph so the report still writes."""
+    try:
+        return doc.add_heading(text, level=level)
+    except KeyError:
+        p = doc.add_paragraph()
+        run = p.add_run(text)
+        run.bold = True
+        run.font.size = Pt(15 if level <= 1 else 13)
+        return p
 
 
 def _mmss(s):
@@ -45,11 +62,11 @@ def _grid(doc, headers, widths=None):
 def write_docx_report(base_docx, review, out_path):
     doc = Document(str(base_docx))
     doc.add_page_break()
-    doc.add_heading("LLM review — automatic suggestions, please verify", level=1)
+    _heading(doc, "LLM review — automatic suggestions, please verify", 1)
     doc.add_paragraph(f"(transcript/audio match coverage: {review.get('match_coverage', '?')}. "
                       f"Times refer to the audio; use the .html viewer to hear each one.)")
 
-    doc.add_heading("Suggested corrections", level=2)
+    _heading(doc, "Suggested corrections", 2)
     corr = review.get("disagreements", [])
     if corr:
         t = _grid(doc, ["Time", "Speaker", "In transcript", "Suggested (from audio)"])
@@ -62,7 +79,7 @@ def write_docx_report(base_docx, review, out_path):
     else:
         doc.add_paragraph("None found.")
 
-    doc.add_heading("Recovered passages (transcript dropped these — often another speaker)", level=2)
+    _heading(doc, "Recovered passages (transcript dropped these — often another speaker)", 2)
     rec = review.get("recovered", [])
     if rec:
         t = _grid(doc, ["Time", "Speaker", "In transcript", "Recovered (from audio)", "Other speaker?"])
@@ -76,7 +93,7 @@ def write_docx_report(base_docx, review, out_path):
     else:
         doc.add_paragraph("None found.")
 
-    doc.add_heading("Possible omissions (heard in audio, missing from transcript)", level=2)
+    _heading(doc, "Possible omissions (heard in audio, missing from transcript)", 2)
     oms = review.get("omissions", [])
     if oms:
         t = _grid(doc, ["Time", "Heard in audio"])
@@ -87,7 +104,7 @@ def write_docx_report(base_docx, review, out_path):
     else:
         doc.add_paragraph("None found.")
 
-    doc.add_heading("Not heard in audio (in transcript only — possible fabrication, verify)", level=2)
+    _heading(doc, "Not heard in audio (in transcript only — possible fabrication, verify)", 2)
     bos = review.get("base_only", [])
     if bos:
         t = _grid(doc, ["~Time", "Speaker", "In transcript (never heard)"])

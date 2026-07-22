@@ -330,9 +330,15 @@ def process_one(audio, base_path, cfg):
     from report_html import write_html_report
     review = review_with_base(audio, base_path, cfg)
     out = out_dirs(cfg)["reviews"] / (Path(audio).stem + ".review.docx")
-    write_docx_report(base_path, review, out)
-    write_html_report(audio, review, out.with_suffix(".html"))
+    # Write what the cockpit needs FIRST (json + html) so a hiccup in the
+    # secondary .docx report can never discard a completed review.
     out.with_suffix(".json").write_text(json.dumps(review, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_html_report(audio, review, out.with_suffix(".html"))
+    try:
+        write_docx_report(base_path, review, out)
+    except Exception as e:  # noqa: BLE001 — .review.docx is a secondary artifact
+        print(f"  (note: could not write the .review.docx summary — {e}; "
+              f"the review page is ready regardless)", flush=True)
     unload_llm(cfg["ollama_url"])  # free the LLM's RAM so the NEXT run's Whisper load fits
     return review
 
