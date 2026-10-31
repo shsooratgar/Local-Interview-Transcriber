@@ -6,6 +6,11 @@ data/*
 output/*
 !output/README.md
 
+# Local working folders holding real recordings or transcripts
+/Audios/
+/Experiment/
+/Not reviewed transcripts/
+
 # Local config (may contain paths/names) and the real glossary.
 # ROOT-ANCHORED on purpose: the Windows bundle's config.yaml MUST be tracked
 # (an unanchored pattern once shipped configless bundles — TEST-REPORT.md BUG 2)
@@ -25,6 +30,7 @@ glossary/*.txt
 *.srt
 *.html
 *.docx
+*.xlsx
 
 # =====================================================================
 #  Python

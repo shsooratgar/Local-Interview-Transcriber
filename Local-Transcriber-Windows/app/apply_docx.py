@@ -220,10 +220,10 @@ def _seg_to_para(doc):
 
 # ---------- header table on the final document ----------
 
-# Rows we CREATE and fill. "Key quotes" was dropped on request (2026-07-16):
+# Rows we CREATE and fill. "Key quotes" was dropped as a feature:
 # we no longer add or fill it.
 _HEADER_ROWS = ["Meeting title", "Date", "Duration", "Participants",
-                "Summary", "Reflections"]
+                "Summary", "Reflections"]  # a "Reflections <initials>" row matches by prefix
 
 # Labels we RECOGNIZE when deciding "is this the meta table?" — a superset, so a
 # transcript whose template still has a Key quotes row is reused (and that row

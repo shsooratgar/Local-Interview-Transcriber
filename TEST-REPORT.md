@@ -1,5 +1,7 @@
 # Windows Bundle Test Report
 
+> Historical record of the first run on real Windows hardware, July 2026. The bugs listed here were fixed afterwards. See WINDOWS.md for the current rules.
+
 **Date:** 2026-07-09 (evening run)
 **Test type:** Automated field test, first run of the Windows distribution on real Windows hardware
 **Machine:** Windows 10 Home 10.0.19045 · Intel i7-10750H (6C/12T, no NVIDIA GPU) · 32 GB RAM · 43 GB free on C:

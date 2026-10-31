@@ -16,6 +16,7 @@ source of truth. The Windows "version" is a distribution kit:
 Local-Transcriber-Windows/
 ├── 1 - SETUP (run once).bat      installer (winget: Python 3.11, ffmpeg, Ollama; venv; models)
 ├── 2 - PROCESS (double-click).bat   run pipeline on ONE audio+transcript, then open review
+├── 3 - PROCESS ALL (batch).bat   run every audio+transcript pair, then open review
 ├── INSTRUCTIONS.txt              for the non-technical end user
 ├── config.yaml                   the ONLY intended divergence point (see §4)
 ├── audio/  transcripts/          the user drops ONE file in each
@@ -27,7 +28,7 @@ Local-Transcriber-Windows/
 ```
 
 The kit is zipped as `Local-Transcriber-Windows.zip` (repo root, committed)
-and shared with collaborators via Drive. Its design constraints: the end user
+and handed to Windows users as a plain download. Its design constraints: the end user
 is **non-technical** (double-click only, no terminal), on a **CPU-only laptop**
 (no CUDA), possibly behind OneDrive, possibly moving folders around.
 
@@ -48,10 +49,9 @@ Never edit `app/*.py` directly. The workflow for every code change:
 The script also refuses to zip if real data (non-`.txt` files) sits in the
 bundle's `audio/`, `transcripts/` or `output/` — confidential-data guard.
 
-If you add a new module to `src/`, decide whether the bundle needs it; if yes,
-copy it once by hand (the script syncs only files already present in `app/`)
-and it is tracked from then on. If a module is deleted from `src/`, the script
-removes the orphan from `app/`.
+The script copies every `src/*.py` except those three, so a new module ships
+automatically; add it to `EXCLUDE_MODULES` if it is dev-only. If a module is
+deleted from `src/`, the script removes the orphan from `app/`.
 
 ## 3. How the SAME code runs on both platforms
 
@@ -93,7 +93,7 @@ model errors, flags pass through unverified instead of crashing.
 | Careful model | `mlx-community/whisper-large-v3-mlx` | `large-v3` (via `_careful_faster`) |
 | LLM | `qwen2.5:14b` | **`qwen2.5:7b`** (CPU-viable; SETUP pulls exactly this) |
 | Python env | conda env `transcriber` (user-managed) | `app/.venv` (SETUP-managed) |
-| Launchers | `review.command`, `batch.command` | `1 - SETUP.bat`, `2 - PROCESS.bat` |
+| Launchers | `review.command`, `batch.command` | `1 - SETUP.bat`, `2 - PROCESS.bat`, `3 - PROCESS ALL.bat` |
 | Config file | repo-root `config.yaml` (falls back to `config.example.yaml`) | bundle-root `config.yaml` (ships in zip) |
 | Data location | `data/audio/`, `data/transcripts/` (many files, batch) | `audio/`, `transcripts/` (ONE file at a time) |
 | Speed (1 h interview) | ~10–20 min | **a few hours** (CPU) |
@@ -154,7 +154,7 @@ Two consequences worth remembering:
    Check: `grep -n "read_text()\|write_text(json" src/*.py` → must be empty.
 2. **Never rewrite fonts in generated documents.** A normalization pass
    (Play/Aptos → Calibri) was added and then REMOVED: it changed how the
-   documents render for the collaborator who owns the originals. The
+   documents render for the people who own the originals. The
    Word-on-Mac "replace fonts" dialog is solved by installing Aptos/Play
    locally on the Mac, never by touching shared files.
 3. **Model caches live outside the bundle** — Hugging Face:
@@ -203,7 +203,7 @@ them, walk every parenthesis and variable expansion by hand.
 
 | Symptom on the user's PC | Cause | Fix |
 |---|---|---|
-| SETUP window vanishes right after the pip step, no `[X]`, models missing → later 404 at review | BUG 1 (zips before 2026-07-09): unquoted parens in an echo inside a block killed the batch at parse time | update to a fixed zip / fixed SETUP.bat; root cause of BOTH July 404 incidents |
+| SETUP window vanishes right after the pip step, no `[X]`, models missing → later 404 at review | BUG 1 (zips before 2026-07-09): unquoted parens in an echo inside a block killed the batch at parse time | update to a fixed zip / fixed SETUP.bat; the likely root cause of both 404 incidents in July |
 | `ModuleNotFoundError` at line 1 of anything | moved folder with pre-July bats (activate.bat) | replace bats / re-run SETUP; new bats immune |
 | Audio ▶ buttons dead; a "Download File Info" dialog pops up instead | a download manager (IDM etc.) intercepts the playback .mp3 | cancel the dialog; add 127.0.0.1 to the manager's exceptions or use a browser without the extension |
 | Yellow `huggingface_hub` symlink warnings | normal on Windows | ignore |
@@ -227,8 +227,7 @@ them, walk every parenthesis and variable expansion by hand.
   own error branches are the current equivalent.
 - The zip is a committed binary artifact; if the repo ever goes properly
   multi-developer, move it to GitHub Releases and keep only the folder in git.
-- Speaker verification by voice (pyannote) is a promised future feature
-  (README status) — if added, remember the bundle user has no GPU and no
+- Speaker verification by voice (pyannote) was never built. If added, remember the bundle user has no GPU and no
   HF account; it likely stays Mac-only, which is fine: the Mac side produces,
   Windows side reviews. NB speaker labels are per-file (noScribe re-diarizes
   each recording; S01 in one file ≠ S01 in another), so cross-file voiceprint
@@ -238,16 +237,18 @@ them, walk every parenthesis and variable expansion by hand.
   Supporting them = a Teams-format detector in transcript_io + format-aware
   paragraph mapping in apply_docx. Deferred.
 
-## 10. Project status (2026-07-21)
+## 10. Project status
 
-**Winding down.** The collaboration concluded: the tool works and saved real
-time, but a tool-corrected transcript still needs a full human re-listen for
-speaker attribution, so the researcher took review back in-house. If this repo is
-ever published: (a) it's the tool only, no data; (b) scrub this file and the
-README first — both contain institution names and usernames in the
-field-incident write-ups; (c) confirm `.gitignore` still excludes `data/`,
-`output/`, `Audios/`, `Experiment/`, `glossary/*.txt` (not the `.example`).
-The removed-features list matters for anyone extending it: **summaries and key
-quotes were deliberately removed** — don't resurrect them. See the project
-memory for the full arc and the accuracy reality (residual errors concentrate
-in domain vocab + proper nouns + speaker attribution).
+**Final state, no active development.** The tool ran on real interviews on Mac
+and Windows. A person still has to listen, because a corrected transcript needs
+a human check of speaker attribution, which this tool does not do. Remaining
+errors concentrate in domain vocabulary, proper nouns and speaker attribution.
+
+Anyone extending it should know that **summary generation and key-quote
+suggestions were built and then removed on request**. Don't bring them back
+without a reason.
+
+Never commit real data. Confirm `.gitignore` still excludes `data/`, `output/`,
+the local working folders and `glossary/*.txt` (except the `.example` file).
+Examples and fixtures must use invented names, never real participants, companies
+or meeting titles.

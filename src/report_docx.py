@@ -2,10 +2,8 @@
 """Write an annotated .docx report from an Option-A review result.
 
 We only ADD to the document; the original transcript text and table are left
-intact:
-  - an 'LLM Summary' row is appended to the top table (existing rows untouched)
-  - a clearly-labelled review section is appended at the end: overview, a clean
-    suggested-corrections table, possible omissions, and overlaps to verify.
+intact. A clearly-labelled review section is appended at the end, with tables of
+suggested corrections, recovered passages, possible omissions and not-heard text.
 """
 from __future__ import annotations
 
