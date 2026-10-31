@@ -1,10 +1,15 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/ethz_logo_white.svg">
+  <img src="assets/ethz_logo_black.svg" alt="ETH Zurich" height="32">
+</picture>
+
 # Local Interview Transcriber
 
 A fully local, AI-powered tool for checking interview transcripts against their recordings. It listens to the audio again with Whisper, compares what it heard with a draft transcript, and shows every likely mistake next to a play button. You accept or reject each suggestion, and it writes a corrected Word document.
 
 Nothing leaves your computer. There are no API keys and no cloud services, and every component is free, so it works for recordings you are not allowed to upload anywhere.
 
-It was built for a university research project with confidential interviews in English and German. This repository contains only the code and invented test data.
+It was originally built as an internal tool for the Chair of Strategic Management and Innovation at ETH Zurich, for confidential research interviews in English and German. This repository contains only the code and invented test data. It is not an official ETH Zurich service, and the ETH Zurich logo remains a registered trademark of ETH Zurich.
 
 ## What it does
 
