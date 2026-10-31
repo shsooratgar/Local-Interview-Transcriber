@@ -78,3 +78,7 @@ On a MacBook Pro with an M5 chip and 32 GB of memory, the first pass transcribed
 ## Status
 
 This is the final state of the project and it is not under active development. There is no automated test suite. It was checked with scripted end-to-end runs on invented data and by use on real interviews.
+
+## License
+
+Apache License 2.0, see [LICENSE](LICENSE). The ETH Zurich logo in `assets/` is not covered by it; see [NOTICE](NOTICE).

@@ -18,6 +18,7 @@ Local-Transcriber-Windows/
 ├── 2 - PROCESS (double-click).bat   run pipeline on ONE audio+transcript, then open review
 ├── 3 - PROCESS ALL (batch).bat   run every audio+transcript pair, then open review
 ├── INSTRUCTIONS.txt              for the non-technical end user
+├── LICENSE                       copy of the repo's Apache 2.0 licence
 ├── config.yaml                   the ONLY intended divergence point (see §4)
 ├── audio/  transcripts/          the user drops ONE file in each
 ├── output/                       created at runtime (cache/ reviews/ final/ changes/)
